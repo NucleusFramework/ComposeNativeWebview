@@ -13,4 +13,6 @@ sealed class ProxyConfig {
         override val host: String,
         override val port: Int
     ) : ProxyConfig()
+
+    override fun toString() = "$host:$port"
 }
