@@ -16,8 +16,9 @@ use wry::cookie::time::OffsetDateTime;
 use wry::cookie::{Cookie, Expiration, SameSite};
 use wry::http::header::HeaderName;
 use wry::http::{HeaderMap, HeaderValue};
-use wry::WebViewBuilder;
-
+use wry::{ProxyConfig, ProxyEndpoint, WebViewBuilder};
+use crate::Proxy::Http;
+use crate::Proxy::Socks5;
 pub use error::WebViewError;
 
 use handle::{make_bounds, raw_window_handle_from, RawWindow};
@@ -66,6 +67,18 @@ pub struct WebViewCookie {
     pub same_site: Option<CookieSameSite>,
     pub is_secure: Option<bool>,
     pub is_http_only: Option<bool>,
+}
+
+#[derive(uniffi::Enum)]
+pub enum Proxy {
+    Http(Address),
+    Socks5(Address),
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Address {
+    pub host: String,
+    pub port: u16
 }
 
 fn header_map_from(headers: Vec<HttpHeader>) -> Result<HeaderMap, WebViewError> {
@@ -146,6 +159,13 @@ fn cookie_from_record(cookie: WebViewCookie) -> Result<Cookie<'static>, WebViewE
     Ok(builder.build())
 }
 
+fn proxy_from_record(proxy: Proxy) -> ProxyConfig {
+    match proxy {
+        Http(addr) => ProxyConfig::Http(ProxyEndpoint { host: addr.host, port: addr.port.to_string() }),
+        Socks5(addr) => ProxyConfig::Socks5(ProxyEndpoint { host: (addr.host), port: (addr.port.to_string()) })
+    }
+}
+
 use std::sync::atomic::AtomicBool;
 
 static LOG_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -216,6 +236,7 @@ fn create_webview_inner(
     url: String,
     user_agent: Option<String>,
     nav_handler: Option<Box<dyn NavigationHandler>>,
+    proxy_config: Option<ProxyConfig>,
 ) -> Result<u64, WebViewError> {
     let user_agent =
         user_agent.and_then(|ua| {
@@ -251,6 +272,10 @@ fn create_webview_inner(
     if let Some(ua) = user_agent {
         builder = builder.with_user_agent(ua);
     }
+
+    if let Some(proxy) = proxy_config {
+        builder = builder.with_proxy_config(proxy)
+    } 
 
     let webview = builder
         .with_navigation_handler(move |new_url| {
@@ -358,12 +383,13 @@ pub fn create_webview(
     width: i32,
     height: i32,
     url: String,
-    nav_handler: Option<Box<dyn NavigationHandler>>
+    nav_handler: Option<Box<dyn NavigationHandler>>,
+    proxy: Option<Proxy>
 ) -> Result<u64, WebViewError> {
     #[cfg(target_os = "linux")]
     {
         return run_on_gtk_thread(move || {
-            create_webview_inner(parent_handle, width, height, url, None, nav_handler)
+            create_webview_inner(parent_handle, width, height, url, None, nav_handler, proxy.map(proxy_from_record))
         });
     }
 
@@ -378,12 +404,13 @@ pub fn create_webview_with_user_agent(
     height: i32,
     url: String,
     user_agent: Option<String>,
-    nav_handler: Option<Box<dyn NavigationHandler>>
+    nav_handler: Option<Box<dyn NavigationHandler>>,
+    proxy: Option<Proxy>
 ) -> Result<u64, WebViewError> {
     #[cfg(target_os = "linux")]
     {
         return run_on_gtk_thread(move || {
-            create_webview_inner(parent_handle, width, height, url, user_agent, nav_handler)
+            create_webview_inner(parent_handle, width, height, url, user_agent, nav_handler, proxy.map(proxy_from_record))
         });
     }
 

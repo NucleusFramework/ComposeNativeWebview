@@ -9,12 +9,12 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 import kotlin.concurrent.thread
-import kotlin.properties.Delegates
 
 
 class WryWebViewPanel(
     initialUrl: String,
     customUserAgent: String? = null,
+    proxyConfig: ProxyConfig? = null,
     private val bridgeLogger: (String) -> Unit = { System.err.println(it) }
 ) : JPanel() {
     private val host = SkikoInterop.createHost()
@@ -23,6 +23,7 @@ class WryWebViewPanel(
     private var parentIsWindow: Boolean = false
     private var pendingUrl: String = initialUrl
     private val customUserAgent: String? = customUserAgent?.trim()?.takeIf { it.isNotEmpty() }
+    private val proxy: Proxy? = proxyConfig?.toProxy()
     private var pendingUrlWithHeaders: String? = null
     private var pendingHeaders: Map<String, String> = emptyMap()
     private var pendingHtml: String? = null
@@ -348,7 +349,7 @@ class WryWebViewPanel(
             return try {
                 webviewId =
                     if (userAgent == null) {
-                        NativeBindings.createWebview(handleSnapshot, width, height, initialUrl, handler)
+                        NativeBindings.createWebview(handleSnapshot, width, height, initialUrl, handler, proxy)
                     } else {
                         NativeBindings.createWebviewWithUserAgent(
                             handleSnapshot,
@@ -356,7 +357,8 @@ class WryWebViewPanel(
                             height,
                             initialUrl,
                             userAgent,
-                            handler
+                            handler,
+                            proxy
                         )
                     }
                 updateBounds()
@@ -394,7 +396,7 @@ class WryWebViewPanel(
         thread(name = "wry-webview-create", isDaemon = true) {
             val createdId = try {
                 if (userAgent == null) {
-                    NativeBindings.createWebview(handleSnapshot, width, height, initialUrl, handler)
+                    NativeBindings.createWebview(handleSnapshot, width, height, initialUrl, handler, proxy)
                 } else {
                     NativeBindings.createWebviewWithUserAgent(
                         handleSnapshot,
@@ -402,7 +404,8 @@ class WryWebViewPanel(
                         height,
                         initialUrl,
                         userAgent,
-                        handler
+                        handler,
+                        proxy
                     )
                 }
             } catch (e: RuntimeException) {
@@ -702,8 +705,8 @@ class WryWebViewPanel(
 
 private object NativeBindings {
 
-    fun createWebview(parentHandle: ULong, width: Int, height: Int, url: String, handler: NavigationHandler): ULong {
-        return io.github.kdroidfilter.webview.wry.createWebview(parentHandle, width, height, url, handler)
+    fun createWebview(parentHandle: ULong, width: Int, height: Int, url: String, handler: NavigationHandler, proxy: Proxy?): ULong {
+        return io.github.kdroidfilter.webview.wry.createWebview(parentHandle, width, height, url, handler, proxy)
     }
 
     fun createWebviewWithUserAgent(
@@ -713,6 +716,7 @@ private object NativeBindings {
         url: String,
         userAgent: String,
         handler: NavigationHandler,
+        proxy: Proxy?
     ): ULong {
         return io.github.kdroidfilter.webview.wry.createWebviewWithUserAgent(
             parentHandle,
@@ -721,6 +725,7 @@ private object NativeBindings {
             url,
             userAgent,
             handler,
+            proxy
         )
     }
 
