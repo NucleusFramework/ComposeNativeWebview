@@ -17,18 +17,20 @@ import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.jsbridge.parseJsMessage
 import io.github.kdroidfilter.webview.request.WebRequest
 import io.github.kdroidfilter.webview.request.WebRequestInterceptResult
+import io.github.kdroidfilter.webview.setting.ProxyConfig
 import kotlinx.coroutines.delay
 
 actual class WebViewFactoryParam(
     val state: WebViewState,
     val fileContent: String = "",
     val userAgent: String? = null,
+    val proxyConfig: ProxyConfig? = null
 )
 
 actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView =
     when (val content = param.state.content) {
-        is WebContent.Url -> NativeWebView(content.url, param.userAgent ?: param.state.webSettings.customUserAgentString)
-        else -> NativeWebView("about:blank", param.userAgent ?: param.state.webSettings.customUserAgentString)
+        is WebContent.Url -> NativeWebView(content.url, param.userAgent ?: param.state.webSettings.customUserAgentString, param.proxyConfig?.toJvmProxyConfig())
+        else -> NativeWebView("about:blank", param.userAgent ?: param.state.webSettings.customUserAgentString, param.proxyConfig?.toJvmProxyConfig())
     }
 
 @Composable
@@ -44,6 +46,7 @@ actual fun ActualWebView(
     val currentOnDispose by rememberUpdatedState(onDispose)
     val scope = rememberCoroutineScope()
 
+    val proxyConfig = remember { state.webSettings.desktopWebSettings.proxyConfig }
     val desiredUserAgent = state.webSettings.customUserAgentString?.trim()?.takeIf { it.isNotEmpty() }
     var effectiveUserAgent by remember { mutableStateOf(desiredUserAgent) }
 
@@ -55,7 +58,7 @@ actual fun ActualWebView(
     }
 
     key(effectiveUserAgent) {
-        val nativeWebView = remember(state, factory) { factory(WebViewFactoryParam(state, userAgent = effectiveUserAgent)) }
+        val nativeWebView = remember(state, factory) { factory(WebViewFactoryParam(state, userAgent = effectiveUserAgent, proxyConfig = proxyConfig)) }
 
         val desktopWebView =
             remember(nativeWebView, scope, webViewJsBridge) {
@@ -173,4 +176,9 @@ actual fun ActualWebView(
             }
         }
     }
+}
+
+internal fun ProxyConfig.toJvmProxyConfig(): io.github.kdroidfilter.webview.wry.JvmProxyConfig = when (this) {
+    is ProxyConfig.Http -> io.github.kdroidfilter.webview.wry.JvmProxyConfig.Http(host, port)
+    is ProxyConfig.Socks5 -> io.github.kdroidfilter.webview.wry.JvmProxyConfig.Socks5(host, port)
 }

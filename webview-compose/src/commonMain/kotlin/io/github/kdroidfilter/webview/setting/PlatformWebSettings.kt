@@ -14,6 +14,7 @@ sealed class PlatformWebSettings {
 
     data class DesktopWebSettings(
         var transparent: Boolean = true,
+        var proxyConfig: ProxyConfig? = null
     ) : PlatformWebSettings()
 
     data class IOSWebSettings(

@@ -14,7 +14,7 @@ import kotlin.concurrent.thread
 class WryWebViewPanel(
     initialUrl: String,
     customUserAgent: String? = null,
-    proxyConfig: ProxyConfig? = null,
+    jvmProxyConfig: JvmProxyConfig? = null,
     private val bridgeLogger: (String) -> Unit = { System.err.println(it) }
 ) : JPanel() {
     private val host = SkikoInterop.createHost()
@@ -23,7 +23,7 @@ class WryWebViewPanel(
     private var parentIsWindow: Boolean = false
     private var pendingUrl: String = initialUrl
     private val customUserAgent: String? = customUserAgent?.trim()?.takeIf { it.isNotEmpty() }
-    private val proxy: Proxy? = proxyConfig?.toProxy()
+    private val proxy: Proxy? = jvmProxyConfig?.toProxy()
     private var pendingUrlWithHeaders: String? = null
     private var pendingHeaders: Map<String, String> = emptyMap()
     private var pendingHtml: String? = null
