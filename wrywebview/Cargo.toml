@@ -12,7 +12,7 @@ path = "src/main/rust/lib.rs"
 [dependencies]
 thiserror = "2.0.11"
 uniffi = "0.29.4"
-wry = "0.53.5"
+wry = { version = "0.53.5", features = ["mac-proxy"] }
 
 [profile.release]
 opt-level = "z"
