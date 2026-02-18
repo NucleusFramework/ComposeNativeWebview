@@ -46,7 +46,9 @@ actual fun ActualWebView(
     val currentOnDispose by rememberUpdatedState(onDispose)
     val scope = rememberCoroutineScope()
 
-    val proxyConfig = remember { state.webSettings.desktopWebSettings.proxyConfig }
+    val desiredProxyConfig = state.webSettings.desktopWebSettings.proxyConfig
+    var effectiveProxyConfig by remember { mutableStateOf(desiredProxyConfig) }
+
     val desiredUserAgent = state.webSettings.customUserAgentString?.trim()?.takeIf { it.isNotEmpty() }
     var effectiveUserAgent by remember { mutableStateOf(desiredUserAgent) }
 
@@ -57,8 +59,15 @@ actual fun ActualWebView(
         effectiveUserAgent = desiredUserAgent
     }
 
-    key(effectiveUserAgent) {
-        val nativeWebView = remember(state, factory) { factory(WebViewFactoryParam(state, userAgent = effectiveUserAgent, proxyConfig = proxyConfig)) }
+    LaunchedEffect(desiredProxyConfig) {
+        if (desiredProxyConfig == effectiveProxyConfig) return@LaunchedEffect
+        // Wry applies proxy config at creation time, so recreate the webview after a small debounce.
+        delay(400)
+        effectiveProxyConfig = desiredProxyConfig
+    }
+
+    key(effectiveUserAgent, effectiveProxyConfig) {
+        val nativeWebView = remember(state, factory) { factory(WebViewFactoryParam(state, userAgent = effectiveUserAgent, proxyConfig = effectiveProxyConfig)) }
 
         val desktopWebView =
             remember(nativeWebView, scope, webViewJsBridge) {
