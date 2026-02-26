@@ -394,7 +394,7 @@ pub fn create_webview(
     }
 
     #[cfg(not(target_os = "linux"))]
-    run_on_main_thread(move || create_webview_inner(parent_handle, width, height, url, None, nav_handler))
+    run_on_main_thread(move || create_webview_inner(parent_handle, width, height, url, None, nav_handler, proxy.map(proxy_from_record)))
 }
 
 #[uniffi::export]
@@ -415,7 +415,7 @@ pub fn create_webview_with_user_agent(
     }
 
     #[cfg(not(target_os = "linux"))]
-    run_on_main_thread(move || create_webview_inner(parent_handle, width, height, url, user_agent,nav_handler))
+    run_on_main_thread(move || create_webview_inner(parent_handle, width, height, url, user_agent,nav_handler, proxy.map(proxy_from_record)))
 }
 
 // ============================================================================
