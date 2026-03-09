@@ -487,6 +487,7 @@ pub fn create_webview(
            width, height,
            url,
            user_agent,
+           proxy.map(proxy_from_record),
            data_directory,
            zoom,
            transparent,
@@ -499,7 +500,6 @@ pub fn create_webview(
            autoplay,
            focused,
            nav_handler,
-           proxy
        )
    )
 }
