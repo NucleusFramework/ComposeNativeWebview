@@ -142,16 +142,8 @@ pub struct WebViewEntry {
     pub ptr: *mut WebView,
     pub thread_id: ThreadId,
     pub state: Arc<WebViewState>,
-}
-
-impl Clone for WebViewEntry {
-    fn clone(&self) -> Self {
-        WebViewEntry {
-            ptr: self.ptr,
-            thread_id: self.thread_id,
-            state: Arc::clone(&self.state),
-        }
-    }
+    #[allow(dead_code)]
+    pub context: Option<wry::WebContext>,
 }
 
 // The raw pointer is only dereferenced on the creating thread (checked at runtime).
@@ -202,12 +194,17 @@ pub fn get_state(id: u64) -> Result<Arc<WebViewState>, WebViewError> {
 }
 
 /// Registers a new WebView in the global registry.
-pub fn register(webview: WebView, state: Arc<WebViewState>) -> Result<u64, WebViewError> {
+pub fn register(
+    webview: WebView,
+    state: Arc<WebViewState>,
+    context: Option<wry::WebContext>,
+) -> Result<u64, WebViewError> {
     let id = next_id();
     let entry = WebViewEntry {
         ptr: Box::into_raw(Box::new(webview)),
         thread_id: std::thread::current().id(),
         state,
+        context,
     };
 
     let mut map = webviews()

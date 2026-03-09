@@ -12,25 +12,57 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import io.github.kdroidfilter.webview.cookie.WryCookieManager
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.jsbridge.parseJsMessage
 import io.github.kdroidfilter.webview.request.WebRequest
 import io.github.kdroidfilter.webview.request.WebRequestInterceptResult
 import io.github.kdroidfilter.webview.setting.ProxyConfig
+import io.github.kdroidfilter.webview.wry.Rgba
 import kotlinx.coroutines.delay
 
 actual class WebViewFactoryParam(
     val state: WebViewState,
     val fileContent: String = "",
-    val userAgent: String? = null,
-    val proxyConfig: ProxyConfig? = null
 )
 
 actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView =
     when (val content = param.state.content) {
-        is WebContent.Url -> NativeWebView(content.url, param.userAgent ?: param.state.webSettings.customUserAgentString, param.proxyConfig?.toJvmProxyConfig())
-        else -> NativeWebView("about:blank", param.userAgent ?: param.state.webSettings.customUserAgentString, param.proxyConfig?.toJvmProxyConfig())
+        is WebContent.Url -> NativeWebView(
+            initialUrl = content.url,
+            customUserAgent = param.state.webSettings.customUserAgentString,
+            dataDirectory = param.state.webSettings.desktopWebSettings.dataDirectory,
+            supportZoom = param.state.webSettings.supportZoom,
+            backgroundColor = param.state.webSettings.backgroundColor.toRgba(),
+            transparent = param.state.webSettings.desktopWebSettings.transparent,
+            initScript = param.state.webSettings.desktopWebSettings.initScript,
+            enableClipboard = param.state.webSettings.desktopWebSettings.enableClipboard,
+            enableDevtools = param.state.webSettings.desktopWebSettings.enableDevtools,
+            enableNavigationGestures = param.state.webSettings.desktopWebSettings.enableNavigationGestures,
+            incognito = param.state.webSettings.desktopWebSettings.incognito,
+            autoplayWithoutUserInteraction = param.state.webSettings.desktopWebSettings.autoplayWithoutUserInteraction,
+            focused = param.state.webSettings.desktopWebSettings.focused,
+            proxyConfig = param.state.webSettings.desktopWebSettings.proxyConfig?.toJvmProxyConfig(),
+        )
+
+        else -> NativeWebView(
+            initialUrl = "about:blank",
+            customUserAgent = param.state.webSettings.customUserAgentString,
+            dataDirectory = param.state.webSettings.desktopWebSettings.dataDirectory,
+            supportZoom = param.state.webSettings.supportZoom,
+            backgroundColor = param.state.webSettings.backgroundColor.toRgba(),
+            transparent = param.state.webSettings.desktopWebSettings.transparent,
+            initScript = param.state.webSettings.desktopWebSettings.initScript,
+            enableClipboard = param.state.webSettings.desktopWebSettings.enableClipboard,
+            enableDevtools = param.state.webSettings.desktopWebSettings.enableDevtools,
+            enableNavigationGestures = param.state.webSettings.desktopWebSettings.enableNavigationGestures,
+            incognito = param.state.webSettings.desktopWebSettings.incognito,
+            autoplayWithoutUserInteraction = param.state.webSettings.desktopWebSettings.autoplayWithoutUserInteraction,
+            focused = param.state.webSettings.desktopWebSettings.focused,
+            proxyConfig = param.state.webSettings.desktopWebSettings.proxyConfig?.toJvmProxyConfig(),
+        )
     }
 
 @Composable
@@ -46,37 +78,35 @@ actual fun ActualWebView(
     val currentOnDispose by rememberUpdatedState(onDispose)
     val scope = rememberCoroutineScope()
 
-    val desiredProxyConfig = state.webSettings.desktopWebSettings.proxyConfig
-    var effectiveProxyConfig by remember { mutableStateOf(desiredProxyConfig) }
-
-    val desiredUserAgent = state.webSettings.customUserAgentString?.trim()?.takeIf { it.isNotEmpty() }
-    var effectiveUserAgent by remember { mutableStateOf(desiredUserAgent) }
-
-    LaunchedEffect(desiredUserAgent) {
-        if (desiredUserAgent == effectiveUserAgent) return@LaunchedEffect
-        // Wry applies user-agent at creation time, so recreate the webview after a small debounce.
-        delay(400)
-        effectiveUserAgent = desiredUserAgent
+    val desiredSettingsKey = state.webSettings.let {
+        listOf(
+            it.customUserAgentString?.trim()?.takeIf(String::isNotEmpty),
+            it.supportZoom,
+            it.backgroundColor,
+        )
     }
 
-    LaunchedEffect(desiredProxyConfig) {
-        if (desiredProxyConfig == effectiveProxyConfig) return@LaunchedEffect
-        // Wry applies proxy config at creation time, so recreate the webview after a small debounce.
-        delay(400)
-        effectiveProxyConfig = desiredProxyConfig
+    var effectiveSettingsKey by remember { mutableStateOf(desiredSettingsKey) }
+
+    LaunchedEffect(desiredSettingsKey) {
+        if (desiredSettingsKey != effectiveSettingsKey) {
+            delay(400)
+            effectiveSettingsKey = desiredSettingsKey
+        }
     }
 
-    key(effectiveUserAgent, effectiveProxyConfig) {
-        val nativeWebView = remember(state, factory) { factory(WebViewFactoryParam(state, userAgent = effectiveUserAgent, proxyConfig = effectiveProxyConfig)) }
+    key(effectiveSettingsKey) {
+        val nativeWebView = remember(state, factory) {
+            state.webView?.nativeWebView ?: factory(WebViewFactoryParam(state))
+        }
 
-        val desktopWebView =
-            remember(nativeWebView, scope, webViewJsBridge) {
-                DesktopWebView(
-                    webView = nativeWebView,
-                    scope = scope,
-                    webViewJsBridge = webViewJsBridge,
-                )
-            }
+        val desktopWebView = remember(nativeWebView, scope, webViewJsBridge) {
+            DesktopWebView(
+                nativeWebView = nativeWebView,
+                scope = scope,
+                webViewJsBridge = webViewJsBridge,
+            )
+        }
 
         LaunchedEffect(desktopWebView) {
             state.webView = desktopWebView
@@ -85,52 +115,58 @@ actual fun ActualWebView(
         }
 
         // Poll native state (URL/loading/title/nav) and drain IPC messages for JS bridge.
-        LaunchedEffect(nativeWebView, state, navigator, webViewJsBridge) {
-            while (true) {
-                if (!nativeWebView.isReady()) {
-                    if (state.loadingState !is LoadingState.Initializing) {
-                        state.loadingState = LoadingState.Initializing
+        listOf(nativeWebView, state, navigator, webViewJsBridge).let {
+            LaunchedEffect(it) {
+                while (true) {
+                    if (!nativeWebView.isReady()) {
+                        if (state.loadingState !is LoadingState.Initializing) {
+                            state.loadingState = LoadingState.Initializing
+                        }
+                        delay(50)
+                        continue
+                    }
+
+                    val isLoading = nativeWebView.isLoading()
+                    state.loadingState =
+                        if (isLoading) {
+                            val next =
+                                when (val current = state.loadingState) {
+                                    is LoadingState.Loading -> (current.progress + 0.02f).coerceAtMost(0.9f)
+                                    else -> 0.1f
+                                }
+                            LoadingState.Loading(next)
+                        } else {
+                            LoadingState.Finished
+                        }
+
+                    val url = nativeWebView.getCurrentUrl()
+                    if (!url.isNullOrBlank()) {
+                        if (!isLoading || state.lastLoadedUrl.isNullOrBlank()) {
+                            state.lastLoadedUrl = url
+                        }
+                    }
+
+                    val title = nativeWebView.getTitle()
+                    if (!title.isNullOrBlank()) {
+                        state.pageTitle = title
+                    }
+
+                    navigator.canGoBack = nativeWebView.canGoBack()
+                    navigator.canGoForward = nativeWebView.canGoForward()
+
+                    delay(250)
+                }
+            }
+
+            LaunchedEffect(it) {
+                while (true) {
+                    if (webViewJsBridge != null) {
+                        for (raw in nativeWebView.drainIpcMessages()) {
+                            parseJsMessage(raw)?.let { webViewJsBridge.dispatch(it) }
+                        }
                     }
                     delay(50)
-                    continue
                 }
-
-                val isLoading = nativeWebView.isLoading()
-                state.loadingState =
-                    if (isLoading) {
-                        val current = state.loadingState
-                        val next =
-                            when (current) {
-                                is LoadingState.Loading -> (current.progress + 0.02f).coerceAtMost(0.9f)
-                                else -> 0.1f
-                            }
-                        LoadingState.Loading(next)
-                    } else {
-                        LoadingState.Finished
-                    }
-
-                val url = nativeWebView.getCurrentUrl()
-                if (!url.isNullOrBlank()) {
-                    if (!isLoading || state.lastLoadedUrl.isNullOrBlank()) {
-                        state.lastLoadedUrl = url
-                    }
-                }
-
-                val title = nativeWebView.getTitle()
-                if (!title.isNullOrBlank()) {
-                    state.pageTitle = title
-                }
-
-                navigator.canGoBack = nativeWebView.canGoBack()
-                navigator.canGoForward = nativeWebView.canGoForward()
-
-                if (webViewJsBridge != null) {
-                    for (raw in nativeWebView.drainIpcMessages()) {
-                        parseJsMessage(raw)?.let { webViewJsBridge.dispatch(it) }
-                    }
-                }
-
-                delay(250)
             }
         }
 
@@ -149,7 +185,8 @@ actual fun ActualWebView(
                         method = "GET",
                     )
 
-                return@a when (val interceptResult = navigator.requestInterceptor.onInterceptUrlRequest(webRequest, navigator)) {
+                return@a when (val interceptResult =
+                    navigator.requestInterceptor.onInterceptUrlRequest(webRequest, navigator)) {
                     WebRequestInterceptResult.Allow -> true
 
                     WebRequestInterceptResult.Reject -> false
@@ -190,4 +227,13 @@ actual fun ActualWebView(
 internal fun ProxyConfig.toJvmProxyConfig(): io.github.kdroidfilter.webview.wry.JvmProxyConfig = when (this) {
     is ProxyConfig.Http -> io.github.kdroidfilter.webview.wry.JvmProxyConfig.Http(host, port)
     is ProxyConfig.Socks5 -> io.github.kdroidfilter.webview.wry.JvmProxyConfig.Socks5(host, port)
+}
+
+private fun Color.toRgba(): Rgba {
+    val argb: Int = this.toArgb() // 0xAARRGGBB (sRGB)
+    val a: UByte = ((argb ushr 24) and 0xFF).toUByte()
+    val r: UByte = ((argb ushr 16) and 0xFF).toUByte()
+    val g: UByte = ((argb ushr 8) and 0xFF).toUByte()
+    val b: UByte = (argb and 0xFF).toUByte()
+    return Rgba(r = r, g = g, b = b, a = a)
 }

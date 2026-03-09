@@ -6,7 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import java.net.URL
 
 internal class DesktopWebView(
-    override val webView: NativeWebView,
+    override val nativeWebView: NativeWebView,
     override val scope: CoroutineScope,
     override val webViewJsBridge: WebViewJsBridge?,
 ) : IWebView {
@@ -14,15 +14,15 @@ internal class DesktopWebView(
         initWebView()
     }
 
-    override fun canGoBack(): Boolean = webView.canGoBack()
+    override fun canGoBack(): Boolean = nativeWebView.canGoBack()
 
-    override fun canGoForward(): Boolean = webView.canGoForward()
+    override fun canGoForward(): Boolean = nativeWebView.canGoForward()
 
     override fun loadUrl(
         url: String,
         additionalHttpHeaders: Map<String, String>,
     ) {
-        webView.loadUrl(url, additionalHttpHeaders)
+        nativeWebView.loadUrl(url, additionalHttpHeaders)
     }
 
     override suspend fun loadHtml(
@@ -33,7 +33,7 @@ internal class DesktopWebView(
         historyUrl: String?,
     ) {
         if (html == null) return
-        webView.loadHtml(html)
+        nativeWebView.loadHtml(html)
     }
 
     override suspend fun loadHtmlFile(
@@ -58,7 +58,8 @@ internal class DesktopWebView(
                         candidates.add("compose-resources/assets/$normalized")
                         candidates.add("composeResources/files/$normalized")
                         candidates.add("composeResources/assets/$normalized")
-                        val loaders = listOfNotNull(Thread.currentThread().contextClassLoader, this::class.java.classLoader)
+                        val loaders =
+                            listOfNotNull(Thread.currentThread().contextClassLoader, this::class.java.classLoader)
                         candidates.asSequence()
                             .mapNotNull { path ->
                                 loaders.asSequence()
@@ -69,6 +70,7 @@ internal class DesktopWebView(
                             .firstOrNull()
                             ?: error("Resource not found: ${candidates.joinToString()}")
                     }
+
                     WebViewFileReadType.COMPOSE_RESOURCE_FILES ->
                         URL(fileName).openStream().use { it.readBytes().toString(Charsets.UTF_8) }
                 }
@@ -87,23 +89,23 @@ internal class DesktopWebView(
                     """.trimIndent()
                 KLogger.e(e, tag = "DesktopWebView") { "loadHtmlFile failed" }
                 errorHtml
-        }
-        webView.loadHtml(html)
+            }
+        nativeWebView.loadHtml(html)
     }
 
-    override fun goBack() = webView.goBack()
+    override fun goBack() = nativeWebView.goBack()
 
-    override fun goForward() = webView.goForward()
+    override fun goForward() = nativeWebView.goForward()
 
-    override fun reload() = webView.reload()
+    override fun reload() = nativeWebView.reload()
 
-    override fun stopLoading() = webView.stopLoading()
+    override fun stopLoading() = nativeWebView.stopLoading()
 
     override fun evaluateJavaScript(script: String, callback: ((String) -> Unit)?) {
         KLogger.d {
             "evaluateJavaScript: $script"
         }
-        webView.evaluateJavaScript(script) { result ->
+        nativeWebView.evaluateJavaScript(script) { result ->
             callback?.invoke(result)
         }
     }

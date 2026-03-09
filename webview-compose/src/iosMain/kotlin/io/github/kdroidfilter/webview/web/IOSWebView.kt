@@ -5,23 +5,13 @@ import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.util.KLogger
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
-import platform.Foundation.NSArray
-import platform.Foundation.NSBundle
-import platform.Foundation.NSDocumentDirectory
-import platform.Foundation.NSFileManager
-import platform.Foundation.NSMutableURLRequest
-import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSString
-import platform.Foundation.NSURL
-import platform.Foundation.NSUserDomainMask
-import platform.Foundation.setValue
-import platform.Foundation.stringByDeletingLastPathComponent
+import platform.Foundation.*
 import platform.WebKit.WKWebView
 
 internal const val IOS_JS_BRIDGE_HANDLER_NAME: String = "iosJsBridge"
 
 internal class IOSWebView(
-    override val webView: WKWebView,
+    override val nativeWebView: WKWebView,
     override val scope: CoroutineScope,
     override val webViewJsBridge: WebViewJsBridge?,
 ) : IWebView {
@@ -29,9 +19,9 @@ internal class IOSWebView(
         initWebView()
     }
 
-    override fun canGoBack(): Boolean = webView.canGoBack
+    override fun canGoBack(): Boolean = nativeWebView.canGoBack
 
-    override fun canGoForward(): Boolean = webView.canGoForward
+    override fun canGoForward(): Boolean = nativeWebView.canGoForward
 
     override fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
         if (url.startsWith("file://")) {
@@ -52,7 +42,7 @@ internal class IOSWebView(
                     }
 
                 if (readAccessURL != null) {
-                    webView.loadFileURL(fileURL, readAccessURL)
+                    nativeWebView.loadFileURL(fileURL, readAccessURL)
                     return
                 }
             }
@@ -66,7 +56,7 @@ internal class IOSWebView(
                 forHTTPHeaderField = key,
             )
         }
-        webView.loadRequest(request = request)
+        nativeWebView.loadRequest(request = request)
     }
 
     override suspend fun loadHtml(
@@ -77,7 +67,7 @@ internal class IOSWebView(
         historyUrl: String?,
     ) {
         if (html == null) return
-        webView.loadHTMLString(
+        nativeWebView.loadHTMLString(
             string = html,
             baseURL = baseUrl?.let { NSURL.URLWithString(it) },
         )
@@ -154,7 +144,7 @@ internal class IOSWebView(
                 return
             }
 
-            webView.loadFileURL(fileURL, readAccessURL!!)
+            nativeWebView.loadFileURL(fileURL, readAccessURL!!)
         } catch (e: Exception) {
             KLogger.e(e, tag = "IOSWebView") { "Error loading HTML file: $fileName (readType: $readType)" }
             val errorHtml =
@@ -172,24 +162,24 @@ internal class IOSWebView(
     }
 
     override fun goBack() {
-        webView.goBack()
+        nativeWebView.goBack()
     }
 
     override fun goForward() {
-        webView.goForward()
+        nativeWebView.goForward()
     }
 
     override fun reload() {
-        webView.reload()
+        nativeWebView.reload()
     }
 
     override fun stopLoading() {
-        webView.stopLoading()
+        nativeWebView.stopLoading()
     }
 
     @OptIn(ExperimentalForeignApi::class)
     override fun evaluateJavaScript(script: String, callback: ((String) -> Unit)?) {
-        webView.evaluateJavaScript(script) { result, error ->
+        nativeWebView.evaluateJavaScript(script) { result, error ->
             if (callback == null) return@evaluateJavaScript
             if (error != null) {
                 KLogger.e { "evaluateJavaScript error: $error" }
@@ -217,6 +207,9 @@ internal class IOSWebView(
 
     override fun initJsBridge(webViewJsBridge: WebViewJsBridge) {
         val jsMessageHandler = WKJsMessageHandler(webViewJsBridge)
-        webView.configuration.userContentController.addScriptMessageHandler(jsMessageHandler, IOS_JS_BRIDGE_HANDLER_NAME)
+        nativeWebView.configuration.userContentController.addScriptMessageHandler(
+            scriptMessageHandler = jsMessageHandler,
+            name = IOS_JS_BRIDGE_HANDLER_NAME
+        )
     }
 }

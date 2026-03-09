@@ -1,12 +1,6 @@
 package io.github.kdroidfilter.webview.web
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import io.github.kdroidfilter.webview.cookie.CookieManager
 import io.github.kdroidfilter.webview.cookie.WebViewCookieManager
@@ -34,10 +28,8 @@ class WebViewState(
 
     val webSettings: WebSettings by mutableStateOf(WebSettings())
 
-    internal var webView by mutableStateOf<IWebView?>(null)
-
-    val nativeWebView: NativeWebView
-        get() = webView?.webView ?: error("WebView is not initialized")
+    var webView: IWebView? by mutableStateOf(null)
+        internal set
 
     val cookieManager: CookieManager by mutableStateOf(WebViewCookieManager())
 }

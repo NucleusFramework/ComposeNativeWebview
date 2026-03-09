@@ -222,7 +222,13 @@ Commands:
 state.webSettings.customUserAgentString = "MyApp/1.2.3"
 ```
 
+Desktop note on user-agent:
 
+* applied at creation time
+* changing it **recreates** the WebView (debounced)
+* JS context/history may be lostd
+
+👉 Set it early.
 
 ### Proxy (desktop only)
 
@@ -235,13 +241,7 @@ state.webSettings.desktopWebSettings.proxyConfig = ProxyConfig.Socks5("proxy.tld
 
 Proxy is only supported on Windows, macOS 14.0+ and Linux.
 
-Desktop note on both user-agent and proxy:
-
-* applied at creation time
-* changing it **recreates** the WebView (debounced)
-* JS context/history may be lost
-
-👉 Set them early.
+**NOTE:** You need to set the proxy **before** the WebView gets created.
 
 ---
 

@@ -8,6 +8,7 @@ mod handle;
 mod platform;
 mod state;
 
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -16,9 +17,10 @@ use wry::cookie::time::OffsetDateTime;
 use wry::cookie::{Cookie, Expiration, SameSite};
 use wry::http::header::HeaderName;
 use wry::http::{HeaderMap, HeaderValue};
-use wry::{ProxyConfig, ProxyEndpoint, WebViewBuilder};
 use crate::Proxy::Http;
 use crate::Proxy::Socks5;
+use wry::{WebContext, WebViewBuilder, RGBA, ProxyConfig, ProxyEndpoint};
+
 pub use error::WebViewError;
 
 use handle::{make_bounds, raw_window_handle_from, RawWindow};
@@ -79,6 +81,27 @@ pub enum Proxy {
 pub struct Address {
     pub host: String,
     pub port: u16
+}
+
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct Rgba {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl From<Rgba> for RGBA {
+    fn from(v: Rgba) -> Self {
+        (v.r, v.g, v.b, v.a)
+    }
+}
+
+impl From<RGBA> for Rgba {
+    fn from(v: RGBA) -> Self {
+        let (r, g, b, a) = v;
+        Rgba { r, g, b, a }
+    }
 }
 
 fn header_map_from(headers: Vec<HttpHeader>) -> Result<HeaderMap, WebViewError> {
@@ -235,8 +258,19 @@ fn create_webview_inner(
     height: i32,
     url: String,
     user_agent: Option<String>,
-    nav_handler: Option<Box<dyn NavigationHandler>>,
     proxy_config: Option<ProxyConfig>,
+    data_directory: Option<String>,
+    zoom: bool,
+    transparent: bool,
+    background_color: Rgba,
+    init_script: Option<String>,
+    clipboard: bool,
+    dev_tools: bool,
+    navigation_gestures: bool,
+    incognito: bool,
+    autoplay: bool,
+    focused: bool,
+    nav_handler: Option<Box<dyn NavigationHandler>>,
 ) -> Result<u64, WebViewError> {
     let user_agent =
         user_agent.and_then(|ua| {
@@ -245,12 +279,13 @@ fn create_webview_inner(
         });
 
     wry_log!(
-        "[wrywebview] create_webview handle=0x{:x} size={}x{} url={} user_agent={}",
+        "[wrywebview] create_webview handle=0x{:x} size={}x{} url={} user_agent={} data_directory={}",
         parent_handle,
         width,
         height,
         url,
-        user_agent.as_deref().unwrap_or("<default>")
+        user_agent.as_deref().unwrap_or("<default>"),
+        data_directory.as_deref().unwrap_or("<default>")
     );
 
     let raw = raw_window_handle_from(parent_handle)?;
@@ -265,17 +300,38 @@ fn create_webview_inner(
     let state_for_title = Arc::clone(&state);
     let state_for_ipc = Arc::clone(&state);
 
-    let mut builder = WebViewBuilder::new()
+    let mut web_context = data_directory.map(|path| WebContext::new(Some(PathBuf::from(path))));
+
+    let mut builder = if let Some(ref mut context) = web_context {
+        WebViewBuilder::new_with_web_context(context)
+    } else {
+        WebViewBuilder::new()
+    };
+
+    builder = builder
+        .with_hotkeys_zoom(zoom)
+        .with_transparent(transparent)
+        .with_background_color(background_color.into())
+        .with_clipboard(clipboard)
+        .with_devtools(dev_tools)
+        .with_back_forward_navigation_gestures(navigation_gestures)
+        .with_incognito(incognito)
+        .with_autoplay(autoplay)
+        .with_focused(focused)
         .with_url(&url)
         .with_bounds(make_bounds(0, 0, width, height));
 
-    if let Some(ua) = user_agent {
-        builder = builder.with_user_agent(ua);
+    if let Some(is) = init_script {
+        builder = builder.with_initialization_script(is);
     }
 
     if let Some(proxy) = proxy_config {
         builder = builder.with_proxy_config(proxy)
-    } 
+    }
+
+    if let Some(ua) = user_agent {
+        builder = builder.with_user_agent(ua);
+    }
 
     let webview = builder
         .with_navigation_handler(move |new_url| {
@@ -372,7 +428,7 @@ fn create_webview_inner(
         wry_log!("[wrywebview] gtk focus handling configured with X11 support");
     }
 
-    let id = register(webview, state)?;
+    let id = register(webview, state, web_context)?;
     wry_log!("[wrywebview] create_webview success id={}", id);
     Ok(id)
 }
@@ -383,39 +439,69 @@ pub fn create_webview(
     width: i32,
     height: i32,
     url: String,
-    nav_handler: Option<Box<dyn NavigationHandler>>,
-    proxy: Option<Proxy>
-) -> Result<u64, WebViewError> {
-    #[cfg(target_os = "linux")]
-    {
-        return run_on_gtk_thread(move || {
-            create_webview_inner(parent_handle, width, height, url, None, nav_handler, proxy.map(proxy_from_record))
-        });
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    run_on_main_thread(move || create_webview_inner(parent_handle, width, height, url, None, nav_handler, proxy.map(proxy_from_record)))
-}
-
-#[uniffi::export]
-pub fn create_webview_with_user_agent(
-    parent_handle: u64,
-    width: i32,
-    height: i32,
-    url: String,
     user_agent: Option<String>,
-    nav_handler: Option<Box<dyn NavigationHandler>>,
-    proxy: Option<Proxy>
+    proxy: Option<Proxy>,
+    data_directory: Option<String>,
+    zoom: bool,
+    transparent: bool,
+    background_color: Rgba,
+    init_script: Option<String>,
+    clipboard: bool,
+    dev_tools: bool,
+    navigation_gestures: bool,
+    incognito: bool,
+    autoplay: bool,
+    focused: bool,
+    nav_handler: Option<Box<dyn NavigationHandler>>
 ) -> Result<u64, WebViewError> {
-    #[cfg(target_os = "linux")]
-    {
-        return run_on_gtk_thread(move || {
-            create_webview_inner(parent_handle, width, height, url, user_agent, nav_handler, proxy.map(proxy_from_record))
-        });
-    }
+   #[cfg(target_os = "linux")]
+   {
+       return run_on_gtk_thread(move || {
+           create_webview_inner(
+               parent_handle,
+               width,
+               height,
+               url,
+               user_agent,
+               proxy.map(proxy_from_record),
+               data_directory,
+               zoom,
+               transparent,
+               background_color,
+               init_script,
+               clipboard,
+               dev_tools,
+               navigation_gestures,
+               incognito,
+               autoplay,
+               focused,
+               nav_handler,
+           )
+       });
+   }
 
-    #[cfg(not(target_os = "linux"))]
-    run_on_main_thread(move || create_webview_inner(parent_handle, width, height, url, user_agent,nav_handler, proxy.map(proxy_from_record)))
+   #[cfg(not(target_os = "linux"))]
+   run_on_main_thread(
+       move || create_webview_inner(
+           parent_handle,
+           width, height,
+           url,
+           user_agent,
+           data_directory,
+           zoom,
+           transparent,
+           background_color,
+           init_script,
+           clipboard,
+           dev_tools,
+           navigation_gestures,
+           incognito,
+           autoplay,
+           focused,
+           nav_handler,
+           proxy
+       )
+   )
 }
 
 // ============================================================================
@@ -721,9 +807,7 @@ fn focus_inner(id: u64) -> Result<(), WebViewError> {
             wry_log!("[wrywebview] gtk grab_focus called");
         }
 
-        webview
-            .evaluate_script("document.documentElement.focus(); window.focus();")
-            .map_err(WebViewError::from)
+        webview.focus().map_err(WebViewError::from)
     })
 }
 
@@ -789,6 +873,25 @@ pub fn drain_ipc_messages(id: u64) -> Result<Vec<String>, WebViewError> {
 // ============================================================================
 // Cookies
 // ============================================================================
+
+fn get_cookies_inner(id: u64) -> Result<Vec<WebViewCookie>, WebViewError> {
+    wry_log!("[wrywebview] get_cookies id={}", id);
+    with_webview(id, |webview| {
+        let cookies = webview.cookies().map_err(WebViewError::from)?;
+        Ok(cookies.iter().map(cookie_record_from).collect())
+    })
+}
+
+#[uniffi::export]
+pub fn get_cookies(id: u64) -> Result<Vec<WebViewCookie>, WebViewError> {
+    #[cfg(target_os = "linux")]
+    {
+        return run_on_gtk_thread(move || get_cookies_inner(id));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    run_on_main_thread(move || get_cookies_inner(id))
+}
 
 fn get_cookies_for_url_inner(id: u64, url: String) -> Result<Vec<WebViewCookie>, WebViewError> {
     wry_log!("[wrywebview] get_cookies_for_url id={} url={}", id, url);
@@ -875,11 +978,66 @@ pub fn set_cookie(id: u64, cookie: WebViewCookie) -> Result<(), WebViewError> {
 }
 
 // ============================================================================
+// DevTools
+// ============================================================================
+
+fn open_dev_tools_inner(id: u64) -> Result<(), WebViewError> {
+    wry_log!("[wrywebview] open_dev_tools id={}", id);
+    with_webview(id, |webview| {
+        webview.open_devtools();
+        Ok(())
+    })
+}
+
+#[uniffi::export]
+pub fn open_dev_tools(id: u64) -> Result<(), WebViewError> {
+    #[cfg(target_os = "linux")]
+    {
+        return run_on_gtk_thread(move || open_dev_tools_inner(id));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    run_on_main_thread(move || open_dev_tools_inner(id))
+}
+
+fn close_dev_tools_inner(id: u64) -> Result<(), WebViewError> {
+    wry_log!("[wrywebview] close_dev_tools id={}", id);
+    with_webview(id, |webview| {
+        webview.close_devtools();
+        Ok(())
+    })
+}
+
+#[uniffi::export]
+pub fn close_dev_tools(id: u64) -> Result<(), WebViewError> {
+    #[cfg(target_os = "linux")]
+    {
+        return run_on_gtk_thread(move || close_dev_tools_inner(id));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    run_on_main_thread(move || close_dev_tools_inner(id))
+}
+
+// ============================================================================
 // Destruction
 // ============================================================================
 
 fn destroy_webview_inner(id: u64) -> Result<(), WebViewError> {
     wry_log!("[wrywebview] destroy_webview id={}", id);
+
+    #[cfg(target_os = "linux")]
+    {
+        gdk::error_trap_push();
+        let res = unregister(id);
+        while gtk::events_pending() {
+            gtk::main_iteration_do(false);
+        }
+        let _ = gdk::error_trap_pop();
+        res
+    }
+
+    #[cfg(not(target_os = "linux"))]
     unregister(id)
 }
 

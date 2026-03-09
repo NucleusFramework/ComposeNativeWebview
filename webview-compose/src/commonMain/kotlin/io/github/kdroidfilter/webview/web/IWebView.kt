@@ -9,7 +9,7 @@ expect class NativeWebView
  * Platform WebView abstraction.
  */
 interface IWebView {
-    val webView: NativeWebView
+    val nativeWebView: NativeWebView
 
     val scope: CoroutineScope
 

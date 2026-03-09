@@ -8,7 +8,7 @@ import io.github.kdroidfilter.webview.util.KLogger
 import kotlinx.coroutines.CoroutineScope
 
 internal class AndroidWebView(
-    override val webView: WebView,
+    override val nativeWebView: WebView,
     override val scope: CoroutineScope,
     override val webViewJsBridge: WebViewJsBridge?,
 ) : IWebView {
@@ -16,12 +16,12 @@ internal class AndroidWebView(
         initWebView()
     }
 
-    override fun canGoBack(): Boolean = webView.canGoBack()
+    override fun canGoBack(): Boolean = nativeWebView.canGoBack()
 
-    override fun canGoForward(): Boolean = webView.canGoForward()
+    override fun canGoForward(): Boolean = nativeWebView.canGoForward()
 
     override fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
-        webView.loadUrl(url, additionalHttpHeaders)
+        nativeWebView.loadUrl(url, additionalHttpHeaders)
     }
 
     override suspend fun loadHtml(
@@ -32,7 +32,7 @@ internal class AndroidWebView(
         historyUrl: String?,
     ) {
         if (html == null) return
-        webView.loadDataWithBaseURL(baseUrl, html, mimeType, encoding, historyUrl)
+        nativeWebView.loadDataWithBaseURL(baseUrl, html, mimeType, encoding, historyUrl)
     }
 
     override suspend fun loadHtmlFile(fileName: String, readType: WebViewFileReadType) {
@@ -52,34 +52,35 @@ internal class AndroidWebView(
                 val selected =
                     candidates.firstOrNull { path ->
                         try {
-                            webView.context.assets.open(path).close()
+                            nativeWebView.context.assets.open(path).close()
                             true
                         } catch (_: Exception) {
                             false
                         }
                     } ?: candidates.first()
                 val url = "file:///android_asset/$selected"
-                webView.loadUrl(url)
+                nativeWebView.loadUrl(url)
                 KLogger.d(tag = "AndroidWebView") { "loadUrl $url (candidates: ${candidates.joinToString()})" }
             }
-            WebViewFileReadType.COMPOSE_RESOURCE_FILES -> webView.loadUrl(fileName)
+
+            WebViewFileReadType.COMPOSE_RESOURCE_FILES -> nativeWebView.loadUrl(fileName)
         }
     }
 
-    override fun goBack() = webView.goBack()
+    override fun goBack() = nativeWebView.goBack()
 
-    override fun goForward() = webView.goForward()
+    override fun goForward() = nativeWebView.goForward()
 
-    override fun reload() = webView.reload()
+    override fun reload() = nativeWebView.reload()
 
-    override fun stopLoading() = webView.stopLoading()
+    override fun stopLoading() = nativeWebView.stopLoading()
 
     override fun evaluateJavaScript(script: String, callback: ((String) -> Unit)?) {
         val androidScript = "javascript:$script"
         KLogger.d {
             "evaluateJavaScript: $androidScript"
         }
-        webView.evaluateJavascript(androidScript, callback)
+        nativeWebView.evaluateJavascript(androidScript, callback)
     }
 
     override fun injectJsBridge() {
@@ -97,7 +98,7 @@ internal class AndroidWebView(
     }
 
     override fun initJsBridge(webViewJsBridge: WebViewJsBridge) {
-        webView.addJavascriptInterface(this, "androidJsBridge")
+        nativeWebView.addJavascriptInterface(this, "androidJsBridge")
     }
 
     @JavascriptInterface

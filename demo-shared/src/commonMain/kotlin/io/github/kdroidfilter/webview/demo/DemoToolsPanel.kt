@@ -1,9 +1,21 @@
 package io.github.kdroidfilter.webview.demo
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -19,17 +31,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import composewebview.demo_shared.generated.resources.Res
 import io.github.kdroidfilter.webview.cookie.Cookie
-import io.github.kdroidfilter.webview.setting.ProxyConfig
 import io.github.kdroidfilter.webview.util.KLogSeverity
 import io.github.kdroidfilter.webview.web.WebViewNavigator
 import io.github.kdroidfilter.webview.web.WebViewState
@@ -80,9 +87,6 @@ internal fun DemoToolsPanel(
     onSetLogSeverity: (KLogSeverity) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val desktopWebSettings = webViewState.webSettings.desktopWebSettings
-    var proxyType by remember { mutableStateOf("None") }
-    var proxyText by remember { mutableStateOf(desktopWebSettings.proxyConfig?.toString() ?: "") }
     Surface(modifier = modifier, color = MaterialTheme.colorScheme.surface) {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
@@ -371,29 +375,6 @@ internal fun DemoToolsPanel(
                     singleLine = true,
                     label = { Text("Custom User-Agent") },
                 )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = proxyText,
-                    onValueChange = { proxyText = it },
-                    singleLine = true,
-                    label = { Text("Proxy (desktop only)") },
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("None", "HTTP", "SOCKS5").forEach { type ->
-                        FilterChip(
-                            selected = proxyType == type,
-                            onClick = { proxyType = type },
-                            label = { Text(type) },
-                        )
-                    }
-                }
-                Button(
-                    onClick = {
-                        desktopWebSettings.proxyConfig = proxyText.ifBlank { null }?.parseProxyConfig(proxyType)
-                    }
-                ){
-                    Text("Set proxy")
-                }
             }
 
             SectionCard(title = "Logs") {
@@ -473,14 +454,3 @@ private fun inlineHtml(): String =
     </body>
     </html>
     """.trimIndent()
-
-private fun String.parseProxyConfig(proxyType: String): ProxyConfig? {
-    val host = substringBefore(":").ifBlank { null } ?: return null
-    val port = substringAfter(":").toIntOrNull() ?: return null
-    return when (proxyType) {
-        "None" -> null
-        "HTTP" -> ProxyConfig.Http(host, port)
-        "SOCKS5" -> ProxyConfig.Socks5(host, port)
-        else -> error("Invalid proxy type: $proxyType")
-    }
-}

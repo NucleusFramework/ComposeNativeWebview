@@ -1,8 +1,5 @@
 package io.github.kdroidfilter.webview.setting
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -16,10 +13,17 @@ sealed class PlatformWebSettings {
     ) : PlatformWebSettings()
 
     data class DesktopWebSettings(
-        var transparent: Boolean = true
-    ) : PlatformWebSettings() {
-        var proxyConfig: ProxyConfig? by mutableStateOf(null)
-    }
+        var transparent: Boolean = true,
+        var dataDirectory: String? = null,
+        var initScript: String? = null,
+        var enableClipboard: Boolean = true,
+        var enableDevtools: Boolean = false,
+        var enableNavigationGestures: Boolean = true,
+        var incognito: Boolean = false,
+        var autoplayWithoutUserInteraction: Boolean = false,
+        var focused: Boolean = true,
+        var proxyConfig: ProxyConfig? = null,
+    ) : PlatformWebSettings()
 
     data class IOSWebSettings(
         var opaque: Boolean = false,
