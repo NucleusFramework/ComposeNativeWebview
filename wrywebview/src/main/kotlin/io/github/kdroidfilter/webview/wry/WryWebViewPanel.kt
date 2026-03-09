@@ -9,6 +9,7 @@ import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 import kotlin.concurrent.thread
+import kotlin.properties.Delegates
 
 
 class WryWebViewPanel(
@@ -25,6 +26,7 @@ class WryWebViewPanel(
     private val incognito: Boolean = false,
     private val autoplayWithoutUserInteraction: Boolean = false,
     private val focused: Boolean = true,
+    proxyConfig: JvmProxyConfig? = null,
     private val bridgeLogger: (String) -> Unit = { System.err.println(it) }
 ) : JPanel() {
     private val host = SkikoInterop.createHost()
@@ -35,6 +37,7 @@ class WryWebViewPanel(
     private val dataDirectory: String? = dataDirectory?.trim()?.takeIf { it.isNotEmpty() }
     private val customUserAgent: String? = customUserAgent?.trim()?.takeIf { it.isNotEmpty() }
     private val initScript: String? = initScript?.trim()?.takeIf { it.isNotEmpty() }
+    private val proxy: Proxy? = proxyConfig?.toProxy()
     private var pendingUrlWithHeaders: String? = null
     private var pendingHeaders: Map<String, String> = emptyMap()
     private var pendingHtml: String? = null
@@ -401,6 +404,7 @@ class WryWebViewPanel(
                     height = height,
                     url = initialUrl,
                     userAgent = userAgent,
+                    proxy = proxy,
                     dataDirectory = dataDir,
                     zoom = supportZoom,
                     transparent = transparent,
@@ -412,7 +416,7 @@ class WryWebViewPanel(
                     incognito = incognito,
                     autoplay = autoplayWithoutUserInteraction,
                     focused = focused,
-                    navHandler = handler
+                    navHandler = handler,
                 )
                 updateBounds()
                 startGtkPumpIfNeeded()
@@ -444,7 +448,6 @@ class WryWebViewPanel(
                 true
             }
         }
-
         createInFlight = true
         stopCreateTimer()
         thread(name = "wry-webview-create", isDaemon = true) {
@@ -455,6 +458,7 @@ class WryWebViewPanel(
                     height = height,
                     url = initialUrl,
                     userAgent = userAgent,
+                    proxy = proxy,
                     dataDirectory = dataDir,
                     zoom = supportZoom,
                     transparent = transparent,
@@ -466,7 +470,7 @@ class WryWebViewPanel(
                     incognito = incognito,
                     autoplay = autoplayWithoutUserInteraction,
                     focused = focused,
-                    navHandler = handler
+                    navHandler = handler,
                 )
             } catch (e: RuntimeException) {
                 System.err.println("Failed to create Wry webview: ${e.message}")
@@ -771,6 +775,7 @@ private object NativeBindings {
         height: Int,
         url: String,
         userAgent: String?,
+        proxy: Proxy? = null,
         dataDirectory: String?,
         zoom: Boolean,
         transparent: Boolean,
@@ -782,7 +787,7 @@ private object NativeBindings {
         incognito: Boolean,
         autoplay: Boolean,
         focused: Boolean,
-        navHandler: NavigationHandler?
+        navHandler: NavigationHandler?,
     ): ULong {
         return io.github.kdroidfilter.webview.wry.createWebview(
             parentHandle = parentHandle,
@@ -790,6 +795,7 @@ private object NativeBindings {
             height = height,
             url = url,
             userAgent = userAgent,
+            proxy = proxy,
             dataDirectory = dataDirectory,
             zoom = zoom,
             transparent = transparent,

@@ -22,6 +22,7 @@ sealed class PlatformWebSettings {
         var incognito: Boolean = false,
         var autoplayWithoutUserInteraction: Boolean = false,
         var focused: Boolean = true,
+        var proxyConfig: ProxyConfig? = null,
     ) : PlatformWebSettings()
 
     data class IOSWebSettings(

@@ -1,6 +1,15 @@
 package io.github.kdroidfilter.webview.web
 
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
@@ -10,6 +19,7 @@ import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.jsbridge.parseJsMessage
 import io.github.kdroidfilter.webview.request.WebRequest
 import io.github.kdroidfilter.webview.request.WebRequestInterceptResult
+import io.github.kdroidfilter.webview.setting.ProxyConfig
 import io.github.kdroidfilter.webview.wry.Rgba
 import kotlinx.coroutines.delay
 
@@ -33,7 +43,8 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView =
             enableNavigationGestures = param.state.webSettings.desktopWebSettings.enableNavigationGestures,
             incognito = param.state.webSettings.desktopWebSettings.incognito,
             autoplayWithoutUserInteraction = param.state.webSettings.desktopWebSettings.autoplayWithoutUserInteraction,
-            focused = param.state.webSettings.desktopWebSettings.focused
+            focused = param.state.webSettings.desktopWebSettings.focused,
+            proxyConfig = param.state.webSettings.desktopWebSettings.proxyConfig?.toJvmProxyConfig(),
         )
 
         else -> NativeWebView(
@@ -49,7 +60,8 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView =
             enableNavigationGestures = param.state.webSettings.desktopWebSettings.enableNavigationGestures,
             incognito = param.state.webSettings.desktopWebSettings.incognito,
             autoplayWithoutUserInteraction = param.state.webSettings.desktopWebSettings.autoplayWithoutUserInteraction,
-            focused = param.state.webSettings.desktopWebSettings.focused
+            focused = param.state.webSettings.desktopWebSettings.focused,
+            proxyConfig = param.state.webSettings.desktopWebSettings.proxyConfig?.toJvmProxyConfig(),
         )
     }
 
@@ -210,6 +222,11 @@ actual fun ActualWebView(
             }
         }
     }
+}
+
+internal fun ProxyConfig.toJvmProxyConfig(): io.github.kdroidfilter.webview.wry.JvmProxyConfig = when (this) {
+    is ProxyConfig.Http -> io.github.kdroidfilter.webview.wry.JvmProxyConfig.Http(host, port)
+    is ProxyConfig.Socks5 -> io.github.kdroidfilter.webview.wry.JvmProxyConfig.Socks5(host, port)
 }
 
 private fun Color.toRgba(): Rgba {

@@ -17,7 +17,9 @@ use wry::cookie::time::OffsetDateTime;
 use wry::cookie::{Cookie, Expiration, SameSite};
 use wry::http::header::HeaderName;
 use wry::http::{HeaderMap, HeaderValue};
-use wry::{WebContext, WebViewBuilder, RGBA};
+use crate::Proxy::Http;
+use crate::Proxy::Socks5;
+use wry::{WebContext, WebViewBuilder, RGBA, ProxyConfig, ProxyEndpoint};
 
 pub use error::WebViewError;
 
@@ -67,6 +69,18 @@ pub struct WebViewCookie {
     pub same_site: Option<CookieSameSite>,
     pub is_secure: Option<bool>,
     pub is_http_only: Option<bool>,
+}
+
+#[derive(uniffi::Enum)]
+pub enum Proxy {
+    Http(Address),
+    Socks5(Address),
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct Address {
+    pub host: String,
+    pub port: u16
 }
 
 #[derive(Debug, Clone, Copy, uniffi::Record)]
@@ -168,6 +182,13 @@ fn cookie_from_record(cookie: WebViewCookie) -> Result<Cookie<'static>, WebViewE
     Ok(builder.build())
 }
 
+fn proxy_from_record(proxy: Proxy) -> ProxyConfig {
+    match proxy {
+        Http(addr) => ProxyConfig::Http(ProxyEndpoint { host: addr.host, port: addr.port.to_string() }),
+        Socks5(addr) => ProxyConfig::Socks5(ProxyEndpoint { host: (addr.host), port: (addr.port.to_string()) })
+    }
+}
+
 use std::sync::atomic::AtomicBool;
 
 static LOG_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -237,6 +258,7 @@ fn create_webview_inner(
     height: i32,
     url: String,
     user_agent: Option<String>,
+    proxy_config: Option<ProxyConfig>,
     data_directory: Option<String>,
     zoom: bool,
     transparent: bool,
@@ -301,6 +323,10 @@ fn create_webview_inner(
 
     if let Some(is) = init_script {
         builder = builder.with_initialization_script(is);
+    }
+
+    if let Some(proxy) = proxy_config {
+        builder = builder.with_proxy_config(proxy)
     }
 
     if let Some(ua) = user_agent {
@@ -414,6 +440,7 @@ pub fn create_webview(
     height: i32,
     url: String,
     user_agent: Option<String>,
+    proxy: Option<Proxy>,
     data_directory: Option<String>,
     zoom: bool,
     transparent: bool,
@@ -427,52 +454,54 @@ pub fn create_webview(
     focused: bool,
     nav_handler: Option<Box<dyn NavigationHandler>>
 ) -> Result<u64, WebViewError> {
-    #[cfg(target_os = "linux")]
-    {
-        return run_on_gtk_thread(move || {
-            create_webview_inner(
-                parent_handle,
-                width,
-                height,
-                url,
-                user_agent,
-                data_directory,
-                zoom,
-                transparent,
-                background_color,
-                init_script,
-                clipboard,
-                dev_tools,
-                navigation_gestures,
-                incognito,
-                autoplay,
-                focused,
-                nav_handler
-            )
-        });
-    }
+   #[cfg(target_os = "linux")]
+   {
+       return run_on_gtk_thread(move || {
+           create_webview_inner(
+               parent_handle,
+               width,
+               height,
+               url,
+               user_agent,
+               proxy.map(proxy_from_record),
+               data_directory,
+               zoom,
+               transparent,
+               background_color,
+               init_script,
+               clipboard,
+               dev_tools,
+               navigation_gestures,
+               incognito,
+               autoplay,
+               focused,
+               nav_handler,
+           )
+       });
+   }
 
-    #[cfg(not(target_os = "linux"))]
-    run_on_main_thread(
-        move || create_webview_inner(
-            parent_handle,
-            width, height,
-            url,
-            user_agent,
-            data_directory,
-            zoom,
-            transparent,
-            background_color,
-            init_script,
-            clipboard,
-            dev_tools,
-            navigation_gestures,
-            incognito,
-            autoplay,
-            focused,
-            nav_handler
-        )
-    )
+   #[cfg(not(target_os = "linux"))]
+   run_on_main_thread(
+       move || create_webview_inner(
+           parent_handle,
+           width, height,
+           url,
+           user_agent,
+           proxy.map(proxy_from_record),
+           data_directory,
+           zoom,
+           transparent,
+           background_color,
+           init_script,
+           clipboard,
+           dev_tools,
+           navigation_gestures,
+           incognito,
+           autoplay,
+           focused,
+           nav_handler,
+       )
+   )
 }
 
 // ============================================================================
