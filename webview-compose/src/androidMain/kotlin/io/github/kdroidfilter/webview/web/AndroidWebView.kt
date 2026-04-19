@@ -6,6 +6,7 @@ import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.jsbridge.parseJsMessage
 import io.github.kdroidfilter.webview.util.KLogger
 import kotlinx.coroutines.CoroutineScope
+import android.annotation.SuppressLint
 
 internal class AndroidWebView(
     override val nativeWebView: WebView,
@@ -98,6 +99,7 @@ internal class AndroidWebView(
     }
 
     override fun initJsBridge(webViewJsBridge: WebViewJsBridge) {
+        @SuppressLint("AddJavascriptInterface")
         nativeWebView.addJavascriptInterface(this, "androidJsBridge")
     }
 
