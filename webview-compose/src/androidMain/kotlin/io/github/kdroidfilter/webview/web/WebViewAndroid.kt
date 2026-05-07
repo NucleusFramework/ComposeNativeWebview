@@ -126,6 +126,7 @@ private fun configureSettings(webView: WebView, settings: WebSettings) {
             allowFileAccess = it.allowFileAccess
             textZoom = it.textZoom
             useWideViewPort = it.useWideViewPort
+            domStorageEnabled = it.domStorageEnabled
         }
     }
 }
