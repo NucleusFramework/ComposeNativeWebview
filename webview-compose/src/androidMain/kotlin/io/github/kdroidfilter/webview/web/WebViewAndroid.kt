@@ -8,6 +8,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -78,6 +79,12 @@ private fun AndroidWebViewContainer(
         val client = remember { AndroidWebViewClient(state, navigator) }
         val chromeClient = remember { AndroidWebChromeClient(state, navigator) }
         val scope = rememberCoroutineScope()
+
+        BackHandler(
+            enabled = state.webSettings.androidWebSettings.goBackEnabled && navigator.canGoBack,
+        ) {
+            navigator.navigateBack()
+        }
 
         AndroidView(
             factory = { context ->

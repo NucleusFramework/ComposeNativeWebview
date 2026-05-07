@@ -48,6 +48,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutinesAndroid)
+            implementation(libs.androidx.activity.compose)
         }
 
         jvmMain.dependencies {
