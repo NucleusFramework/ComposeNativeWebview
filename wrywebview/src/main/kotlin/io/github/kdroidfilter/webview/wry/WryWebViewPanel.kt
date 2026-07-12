@@ -5,13 +5,15 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import javax.swing.Timer
 import kotlin.concurrent.thread
 
 
-class WryWebViewPanel(
+open class WryWebViewPanel(
     initialUrl: String,
     customUserAgent: String? = null,
     dataDirectory: String? = null,
@@ -91,19 +93,19 @@ class WryWebViewPanel(
         scheduleCreateIfNeeded()
     }
 
-    fun addNavigateListener(data: (String) -> Boolean) {
+    open fun addNavigateListener(data: (String) -> Boolean) {
         handlers.add(data)
     }
 
-    fun removeNavigateListener(data: (String) -> Boolean) {
+    open fun removeNavigateListener(data: (String) -> Boolean) {
         handlers.remove(data)
     }
 
-    fun loadUrl(url: String) {
+    open fun loadUrl(url: String) {
         loadUrl(url, emptyMap())
     }
 
-    fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
+    open fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
         pendingUrl = url
         pendingHtml = null
         pendingHeaders = additionalHttpHeaders
@@ -134,7 +136,7 @@ class WryWebViewPanel(
         log("loadUrl url=$url headers=${additionalHttpHeaders.size} webviewId=$webviewId")
     }
 
-    fun loadHtml(html: String) {
+    open fun loadHtml(html: String) {
         pendingHtml = html
         pendingUrl = "about:blank"
         pendingHeaders = emptyMap()
@@ -150,7 +152,7 @@ class WryWebViewPanel(
         log("loadHtml bytes=${html.length} webviewId=$webviewId")
     }
 
-    fun goBack() {
+    open fun goBack() {
         val action = { webviewId?.let { NativeBindings.goBack(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -160,7 +162,7 @@ class WryWebViewPanel(
         log("goBack webviewId=$webviewId")
     }
 
-    fun goForward() {
+    open fun goForward() {
         val action = { webviewId?.let { NativeBindings.goForward(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -170,7 +172,7 @@ class WryWebViewPanel(
         log("goForward webviewId=$webviewId")
     }
 
-    fun reload() {
+    open fun reload() {
         val action = { webviewId?.let { NativeBindings.reload(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -180,7 +182,7 @@ class WryWebViewPanel(
         log("reload webviewId=$webviewId")
     }
 
-    fun stopLoading() {
+    open fun stopLoading() {
         val action = { webviewId?.let { NativeBindings.stopLoading(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -190,7 +192,7 @@ class WryWebViewPanel(
         log("stopLoading webviewId=$webviewId")
     }
 
-    fun evaluateJavaScript(script: String, callback: (String) -> Unit) {
+    open fun evaluateJavaScript(script: String, callback: (String) -> Unit) {
         val id = webviewId ?: run {
             callback("")
             return
@@ -208,7 +210,7 @@ class WryWebViewPanel(
         }
     }
 
-    fun getCurrentUrl(): String? {
+    open fun getCurrentUrl(): String? {
         return webviewId?.let {
             try {
                 NativeBindings.getUrl(it)
@@ -219,7 +221,7 @@ class WryWebViewPanel(
         }
     }
 
-    fun isLoading(): Boolean {
+    open fun isLoading(): Boolean {
         return webviewId?.let {
             try {
                 NativeBindings.isLoading(it)
@@ -230,7 +232,7 @@ class WryWebViewPanel(
         } ?: true
     }
 
-    fun getTitle(): String? {
+    open fun getTitle(): String? {
         return webviewId?.let {
             try {
                 NativeBindings.getTitle(it)
@@ -241,7 +243,7 @@ class WryWebViewPanel(
         }
     }
 
-    fun canGoBack(): Boolean {
+    open fun canGoBack(): Boolean {
         return webviewId?.let {
             try {
                 NativeBindings.canGoBack(it)
@@ -252,7 +254,7 @@ class WryWebViewPanel(
         } ?: false
     }
 
-    fun canGoForward(): Boolean {
+    open fun canGoForward(): Boolean {
         return webviewId?.let {
             try {
                 NativeBindings.canGoForward(it)
@@ -263,7 +265,7 @@ class WryWebViewPanel(
         } ?: false
     }
 
-    fun drainIpcMessages(): List<String> {
+    open fun drainIpcMessages(): List<String> {
         return webviewId?.let {
             try {
                 NativeBindings.drainIpcMessages(it)
@@ -274,7 +276,7 @@ class WryWebViewPanel(
         } ?: emptyList()
     }
 
-    fun getCookiesForUrl(url: String): List<WebViewCookie> {
+    open fun getCookiesForUrl(url: String): List<WebViewCookie> {
         var result: List<WebViewCookie> = emptyList()
         val id = webviewId ?: run {
             log("getCookiesForUrl webviewId is null")
@@ -293,7 +295,7 @@ class WryWebViewPanel(
         return result
     }
 
-    fun getCookies(): List<WebViewCookie> {
+    open fun getCookies(): List<WebViewCookie> {
         var result: List<WebViewCookie> = emptyList()
         val id = webviewId ?: run {
             log("getCookies webviewId is null")
@@ -312,7 +314,7 @@ class WryWebViewPanel(
         return result
     }
 
-    fun clearCookiesForUrl(url: String) {
+    open fun clearCookiesForUrl(url: String) {
         val action = { webviewId?.let { NativeBindings.clearCookiesForUrl(it, url) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -321,7 +323,7 @@ class WryWebViewPanel(
         }
     }
 
-    fun clearAllCookies() {
+    open fun clearAllCookies() {
         val action = { webviewId?.let { NativeBindings.clearAllCookies(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -330,7 +332,7 @@ class WryWebViewPanel(
         }
     }
 
-    fun setCookie(cookie: WebViewCookie) {
+    open fun setCookie(cookie: WebViewCookie) {
         val action = { webviewId?.let { NativeBindings.setCookie(it, cookie) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -339,10 +341,43 @@ class WryWebViewPanel(
         }
     }
 
-    fun isReady(): Boolean = webviewId != null
+    open fun isReady(): Boolean = webviewId != null
 
-    fun requestWebViewFocus() {
-        val action = { webviewId?.let { NativeBindings.focus(it) } }
+    open fun captureScreenshot(): BufferedImage = captureScreenshot(captureScreenshotNative())
+
+    open fun captureScreenshot(nativeBytes: ByteArray?): BufferedImage {
+        nativeBytes?.let { bytes ->
+            try {
+                return ImageIO.read(java.io.ByteArrayInputStream(bytes))
+            } catch (e: Exception) {
+                log("Failed to parse native screenshot: ${e.message}")
+            }
+        }
+        val img = BufferedImage(
+            width.coerceAtLeast(1),
+            height.coerceAtLeast(1),
+            BufferedImage.TYPE_INT_ARGB
+        )
+        val g = img.createGraphics()
+        paint(g)
+        g.dispose()
+        return img
+    }
+
+    open fun captureScreenshotNative(): ByteArray? {
+        val id = webviewId ?: return null
+        return try {
+            NativeBindings.captureScreenshot(id)
+        } catch (e: Exception) {
+            log("captureScreenshotNative failed: ${e.message}")
+            null
+        }
+    }
+
+    open fun requestWebViewFocus() {
+        val action = {
+            webviewId?.let { NativeBindings.focus(it) }
+        }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
         } else {
@@ -351,7 +386,7 @@ class WryWebViewPanel(
         log("requestWebViewFocus webviewId=$webviewId")
     }
 
-    fun openDevTools() {
+    open fun openDevTools() {
         val action = { webviewId?.let { NativeBindings.openDevTools(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -361,7 +396,7 @@ class WryWebViewPanel(
         log("openDevTools webviewId=$webviewId")
     }
 
-    fun closeDevTools() {
+    open fun closeDevTools() {
         val action = { webviewId?.let { NativeBindings.closeDevTools(it) } }
         if (SwingUtilities.isEventDispatchThread()) {
             action()
@@ -934,5 +969,9 @@ private object NativeBindings {
 
     fun closeDevTools(id: ULong) {
         io.github.kdroidfilter.webview.wry.closeDevTools(id)
+    }
+    
+    fun captureScreenshot(id: ULong): ByteArray {
+        return io.github.kdroidfilter.webview.wry.captureScreenshot(id)
     }
 }

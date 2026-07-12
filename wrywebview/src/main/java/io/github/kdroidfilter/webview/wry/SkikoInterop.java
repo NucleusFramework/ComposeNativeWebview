@@ -1,17 +1,21 @@
 package io.github.kdroidfilter.webview.wry;
 
-import java.awt.Canvas;
-import java.awt.Component;
 import org.jetbrains.skiko.HardwareLayer;
+
+import java.awt.*;
 
 final class SkikoInterop {
     private SkikoInterop() {}
 
     static Canvas createHost() {
-        if (isWindows()) {
+        try {
+            if (isWindows()) {
+                return new Canvas();
+            }
+            return new HardwareLayer();
+        } catch (Throwable e) {
             return new Canvas();
         }
-        return new HardwareLayer();
     }
 
     private static boolean isWindows() {

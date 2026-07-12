@@ -3,10 +3,18 @@ package io.github.kdroidfilter.webview.web
 import io.github.kdroidfilter.webview.jsbridge.WKJsMessageHandler
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.util.KLogger
+import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.*
+import platform.UIKit.UIImagePNGRepresentation
+import platform.WebKit.WKSnapshotConfiguration
 import platform.WebKit.WKWebView
+import platform.posix.memcpy
+import kotlin.coroutines.resume
 
 internal const val IOS_JS_BRIDGE_HANDLER_NAME: String = "iosJsBridge"
 
@@ -175,6 +183,34 @@ internal class IOSWebView(
 
     override fun stopLoading() {
         nativeWebView.stopLoading()
+    }
+
+    @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
+    override suspend fun captureScreenshotOrNull(): ByteArray? {
+        return suspendCancellableCoroutine { continuation ->
+            val configuration = WKSnapshotConfiguration()
+            nativeWebView.takeSnapshotWithConfiguration(configuration) { image, error ->
+                if (error != null) {
+                    KLogger.e { "captureScreenshot error: $error" }
+                    continuation.resume(null)
+                    return@takeSnapshotWithConfiguration
+                }
+                if (image != null) {
+                    val nsData = UIImagePNGRepresentation(image)
+                    if (nsData == null) {
+                        continuation.resume(null)
+                        return@takeSnapshotWithConfiguration
+                    }
+                    val bytes = ByteArray(nsData.length.toInt())
+                    bytes.usePinned { pinned ->
+                        memcpy(pinned.addressOf(0), nsData.bytes, nsData.length)
+                    }
+                    continuation.resume(bytes)
+                } else {
+                    continuation.resume(null)
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalForeignApi::class)

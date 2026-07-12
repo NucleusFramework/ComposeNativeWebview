@@ -1,11 +1,15 @@
 package io.github.kdroidfilter.webview.web
 
+import android.graphics.Bitmap
+import android.graphics.Bitmap.createBitmap
+import android.graphics.Canvas
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.jsbridge.parseJsMessage
 import io.github.kdroidfilter.webview.util.KLogger
 import kotlinx.coroutines.CoroutineScope
+import java.io.ByteArrayOutputStream
 
 internal class AndroidWebView(
     override val nativeWebView: WebView,
@@ -74,6 +78,21 @@ internal class AndroidWebView(
     override fun reload() = nativeWebView.reload()
 
     override fun stopLoading() = nativeWebView.stopLoading()
+
+    override suspend fun captureScreenshotOrNull(): ByteArray? {
+        return runCatching {
+            val bitmap = createBitmap(
+                nativeWebView.width.coerceAtLeast(1),
+                nativeWebView.height.coerceAtLeast(1),
+                Bitmap.Config.ARGB_8888
+            )
+            val canvas = Canvas(bitmap)
+            nativeWebView.draw(canvas)
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            outputStream.toByteArray()
+        }.getOrNull()
+    }
 
     override fun evaluateJavaScript(script: String, callback: ((String) -> Unit)?) {
         val androidScript = "javascript:$script"

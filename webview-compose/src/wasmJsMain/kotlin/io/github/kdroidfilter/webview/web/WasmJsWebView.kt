@@ -4,9 +4,14 @@ package io.github.kdroidfilter.webview.web
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.util.KLogger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.await
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.khronos.webgl.Uint8Array
+import org.khronos.webgl.get
 import org.w3c.dom.HTMLIFrameElement
+import kotlin.js.Promise
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * The native web view implementation for WasmJs platform.
@@ -43,7 +48,7 @@ class WasmJsWebView(
             element.src = url
             if (webViewJsBridge != null) {
                 scope.launch {
-                    delay(500)
+                    delay(500.milliseconds)
                     injectJsBridge()
                 }
             }
@@ -175,6 +180,28 @@ class WasmJsWebView(
             ) {
                 "Failed to stop loading"
             }
+        }
+    }
+
+    /**
+     * Captures a screenshot of the current WebView content.
+     * Note: On WasmJs, this requires the 'html2canvas' library to be available globally.
+     */
+    override suspend fun captureScreenshotOrNull(): ByteArray? {
+        return try {
+            val promise: Promise<JsAny?> = captureScreenshotJs(element)
+            val uint8Array = promise.await() as? Uint8Array
+            uint8Array?.let { array ->
+                ByteArray(array.length) { array[it] } 
+            }
+        } catch (e: Exception) {
+            KLogger.e(
+                t = e,
+                tag = "WasmJsWebView"
+            ) { 
+                "Failed to capture screenshot"
+            }
+            null
         }
     }
 

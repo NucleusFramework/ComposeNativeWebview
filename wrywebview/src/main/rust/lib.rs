@@ -355,51 +355,20 @@ fn create_webview_inner(
     // On Linux, set up focus handling for the GTK widget
     #[cfg(target_os = "linux")]
     {
-        use gdkx11::glib::translate::ToGlibPtr;
-        use gdkx11::glib::Cast;
-        use gdkx11::X11Display;
         use gtk::prelude::WidgetExt;
 
         let gtk_widget = webview.webview();
         gtk_widget.set_can_focus(true);
 
-        // Connect to button-press-event to grab focus when clicked using X11
+        // Connect to button-press-event to grab focus when clicked.
+        // Avoid forcing raw X11 focus here because the host hierarchy may be
+        // managed by AWT/Swing and direct XSetInputFocus can desynchronize focus.
         gtk_widget.connect_button_press_event(|widget, _event| {
             wry_log!("[wrywebview] button_press_event -> grab_focus");
-
-            // Use X11 focus directly for proper keyboard input
-            if let Some(gdk_window) = widget.window() {
-                if let Some(display) = gdk::Display::default() {
-                    if let Ok(x11_display) = display.downcast::<X11Display>() {
-                        unsafe {
-                            let gdk_window_ptr: *mut gdk::ffi::GdkWindow = gdk_window.to_glib_none().0;
-                            let xid = gdkx11::ffi::gdk_x11_window_get_xid(
-                                gdk_window_ptr as *mut gdkx11::ffi::GdkX11Window,
-                            );
-
-                            if xid != 0 {
-                                let x11_display_ptr: *mut gdkx11::ffi::GdkX11Display = x11_display.to_glib_none().0;
-                                let x_display = gdkx11::ffi::gdk_x11_display_get_xdisplay(x11_display_ptr);
-
-                                if !x_display.is_null() {
-                                    x11::xlib::XSetInputFocus(
-                                        x_display as *mut x11::xlib::Display,
-                                        xid,
-                                        x11::xlib::RevertToParent,
-                                        x11::xlib::CurrentTime,
-                                    );
-                                    wry_log!("[wrywebview] button_press XSetInputFocus xid=0x{:x}", xid);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             widget.grab_focus();
             gtk::glib::Propagation::Proceed
         });
-        wry_log!("[wrywebview] gtk focus handling configured with X11 support");
+        wry_log!("[wrywebview] gtk focus handling configured");
     }
 
     let id = register(webview, state, web_context)?;
@@ -723,13 +692,10 @@ pub fn reload(id: u64) -> Result<(), WebViewError> {
 fn focus_inner(id: u64) -> Result<(), WebViewError> {
     wry_log!("[wrywebview] focus id={}", id);
     with_webview(id, |webview| {
-        // On Linux, we need to use X11 focus directly since the GTK widget
-        // is embedded in a foreign (AWT/Swing) window hierarchy
+        // On Linux, keep focus changes within GTK/Wry to avoid desynchronizing
+        // focus with the host AWT/Swing hierarchy.
         #[cfg(target_os = "linux")]
         {
-            use gdkx11::glib::translate::ToGlibPtr;
-            use gdkx11::glib::Cast;
-            use gdkx11::X11Display;
             use gtk::prelude::WidgetExt;
 
             let gtk_widget = webview.webview();
@@ -738,39 +704,6 @@ fn focus_inner(id: u64) -> Result<(), WebViewError> {
             // First, ensure the widget is realized and has a window
             if !gtk_widget.is_realized() {
                 gtk_widget.realize();
-            }
-
-            // Get the GDK window and use X11 to set focus
-            if let Some(gdk_window) = gtk_widget.window() {
-                // Get the X11 display from GDK
-                if let Some(display) = gdk::Display::default() {
-                    if let Ok(x11_display) = display.downcast::<X11Display>() {
-                        unsafe {
-                            // Get the X11 window ID (XID) from the GDK window
-                            let gdk_window_ptr: *mut gdk::ffi::GdkWindow = gdk_window.to_glib_none().0;
-                            let xid = gdkx11::ffi::gdk_x11_window_get_xid(
-                                gdk_window_ptr as *mut gdkx11::ffi::GdkX11Window,
-                            );
-
-                            if xid != 0 {
-                                // Get the raw X11 display pointer
-                                let x11_display_ptr: *mut gdkx11::ffi::GdkX11Display = x11_display.to_glib_none().0;
-                                let x_display = gdkx11::ffi::gdk_x11_display_get_xdisplay(x11_display_ptr);
-
-                                if !x_display.is_null() {
-                                    // XSetInputFocus: RevertToParent = 2, CurrentTime = 0
-                                    x11::xlib::XSetInputFocus(
-                                        x_display as *mut x11::xlib::Display,
-                                        xid,
-                                        x11::xlib::RevertToParent,
-                                        x11::xlib::CurrentTime,
-                                    );
-                                    wry_log!("[wrywebview] XSetInputFocus xid=0x{:x}", xid);
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             // Also call GTK grab_focus as a fallback
@@ -839,6 +772,27 @@ pub fn can_go_forward(id: u64) -> Result<bool, WebViewError> {
 pub fn drain_ipc_messages(id: u64) -> Result<Vec<String>, WebViewError> {
     let state = get_state(id)?;
     state.drain_ipc_messages()
+}
+
+fn capture_screenshot_inner(id: u64) -> Result<Vec<u8>, WebViewError> {
+    wry_log!("[wrywebview] capture_screenshot id={}", id);
+    with_webview(id, |_webview| {
+        // Fallback to JVM paint() in WryWebViewPanel.kt if this returns error
+        Err(WebViewError::Internal(
+            "Native screenshot not implemented for this platform in Rust yet".to_string(),
+        ))
+    })
+}
+
+#[uniffi::export]
+pub fn capture_screenshot(id: u64) -> Result<Vec<u8>, WebViewError> {
+    #[cfg(target_os = "linux")]
+    {
+        return run_on_gtk_thread(move || capture_screenshot_inner(id));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    run_on_main_thread(move || capture_screenshot_inner(id))
 }
 
 // ============================================================================

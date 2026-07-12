@@ -3,7 +3,9 @@ package io.github.kdroidfilter.webview.web
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.util.KLogger
 import kotlinx.coroutines.CoroutineScope
+import java.io.ByteArrayOutputStream
 import java.net.URL
+import javax.imageio.ImageIO
 
 internal class DesktopWebView(
     override val nativeWebView: NativeWebView,
@@ -103,6 +105,18 @@ internal class DesktopWebView(
         nativeWebView.evaluateJavaScript(script) { result ->
             callback?.invoke(result)
         }
+    }
+
+    override suspend fun captureScreenshotOrNull(): ByteArray? {
+        val nativeBytes = nativeWebView.captureScreenshotNative()
+        if (nativeBytes != null) return nativeBytes
+
+        return runCatching {
+            val image = nativeWebView.captureScreenshot(null)
+            val outputStream = ByteArrayOutputStream()
+            ImageIO.write(image, "png", outputStream)
+            outputStream.toByteArray()
+        }.getOrNull()
     }
 
     override fun injectJsBridge() {

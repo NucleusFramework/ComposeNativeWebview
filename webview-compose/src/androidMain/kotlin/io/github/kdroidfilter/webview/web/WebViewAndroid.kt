@@ -3,25 +3,21 @@ package io.github.kdroidfilter.webview.web
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.view.ViewGroup
+import android.webkit.*
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import android.view.ViewGroup
-import android.widget.FrameLayout
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import io.github.kdroidfilter.webview.request.WebRequest
 import io.github.kdroidfilter.webview.request.WebRequestInterceptResult
 import io.github.kdroidfilter.webview.setting.WebSettings
-import io.github.kdroidfilter.webview.util.KLogger
 
 @Composable
 actual fun ActualWebView(
@@ -60,57 +56,77 @@ private fun AndroidWebViewContainer(
     onDispose: (WebView) -> Unit,
     factory: (Context) -> WebView,
 ) {
-    BoxWithConstraints(modifier) {
-        val width =
-            if (constraints.hasFixedWidth) {
-                ViewGroup.LayoutParams.MATCH_PARENT
-            } else {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            }
-        val height =
-            if (constraints.hasFixedHeight) {
-                ViewGroup.LayoutParams.MATCH_PARENT
-            } else {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            }
-
-        val layoutParams = FrameLayout.LayoutParams(width, height)
-        val client = remember { AndroidWebViewClient(state, navigator) }
-        val chromeClient = remember { AndroidWebChromeClient(state, navigator) }
-        val scope = rememberCoroutineScope()
-
-        AndroidView(
-            factory = { context ->
+    if (LocalWebViewFactory.current != null) {
+        val context = LocalContext.current
+        BoxWithConstraints(modifier) {
+            val scope = rememberCoroutineScope()
+            // Still need to create the native webview to satisfy onCreated and state.webView
+            // But don't show it. Note: WebView might need a real context.
+            // In tests, the context from the factory should be fine.
+            remember(state) {
                 factory(context).apply {
                     onCreated(this)
-
-                    this.layoutParams = layoutParams
-                    this.webViewClient = client
-                    this.webChromeClient = chromeClient
-
-                    configureSettings(this, state.webSettings)
-                    setBackgroundColor(state.webSettings.backgroundColor.toArgb())
-
-                    val androidWebView = AndroidWebView(this, scope, webViewJsBridge)
+                    val androidWebView = AndroidWebView(
+                        nativeWebView = this,
+                        scope = scope,
+                        webViewJsBridge = webViewJsBridge
+                    )
                     state.webView = androidWebView
                     webViewJsBridge?.webView = androidWebView
                 }
-            },
-            modifier = Modifier,
-            update = { webView ->
-                webView.layoutParams = layoutParams
-                configureSettings(webView, state.webSettings)
-                webView.setBackgroundColor(state.webSettings.backgroundColor.toArgb())
-            },
-            onRelease = { webView ->
-                state.webView = null
-                webViewJsBridge?.webView = null
-                webView.stopLoading()
-                webView.webChromeClient = null
-                webView.destroy()
-                onDispose(webView)
-            },
-        )
+            }
+        }
+    } else {
+        BoxWithConstraints(modifier) {
+            val width = if (constraints.hasFixedWidth) {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            } else {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            val height = if (constraints.hasFixedHeight) {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            } else {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+
+            val layoutParams = FrameLayout.LayoutParams(width, height)
+            val client = remember { AndroidWebViewClient(state, navigator) }
+            val chromeClient = remember { AndroidWebChromeClient(state, navigator) }
+            val scope = rememberCoroutineScope()
+
+            AndroidView(
+                factory = { context ->
+                    factory(context).apply {
+                        onCreated(this)
+
+                        this.layoutParams = layoutParams
+                        this.webViewClient = client
+                        this.webChromeClient = chromeClient
+
+                        configureSettings(this, state.webSettings)
+                        setBackgroundColor(state.webSettings.backgroundColor.toArgb())
+
+                        val androidWebView = AndroidWebView(this, scope, webViewJsBridge)
+                        state.webView = androidWebView
+                        webViewJsBridge?.webView = androidWebView
+                    }
+                },
+                modifier = Modifier,
+                update = { webView ->
+                    webView.layoutParams = layoutParams
+                    configureSettings(webView, state.webSettings)
+                    webView.setBackgroundColor(state.webSettings.backgroundColor.toArgb())
+                },
+                onRelease = { webView ->
+                    state.webView = null
+                    webViewJsBridge?.webView = null
+                    webView.stopLoading()
+                    webView.webChromeClient = null
+                    webView.destroy()
+                    onDispose(webView)
+                },
+            )
+        }
     }
 }
 

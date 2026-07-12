@@ -41,18 +41,9 @@ fun rememberWebViewState(
     extraSettings: WebSettings.() -> Unit = {},
 ): WebViewState =
     remember {
-        WebViewState(
-            WebContent.Url(
-                url = url,
-                additionalHttpHeaders = additionalHttpHeaders,
-            ),
-        )
+        WebViewState(WebContent.Url(url, additionalHttpHeaders))
     }.apply {
-        this.content =
-            WebContent.Url(
-                url = url,
-                additionalHttpHeaders = additionalHttpHeaders,
-            )
+        this.content = WebContent.Url(url, additionalHttpHeaders)
         extraSettings(this.webSettings)
     }
 

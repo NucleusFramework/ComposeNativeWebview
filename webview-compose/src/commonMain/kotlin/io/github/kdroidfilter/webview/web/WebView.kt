@@ -1,32 +1,13 @@
 package io.github.kdroidfilter.webview.web
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.merge
 
-@Composable
-fun WebView(
-    state: WebViewState,
-    modifier: Modifier = Modifier,
-    navigator: WebViewNavigator = rememberWebViewNavigator(),
-    webViewJsBridge: WebViewJsBridge? = null,
-    onCreated: () -> Unit = {},
-    onDispose: () -> Unit = {},
-) {
-    WebView(
-        state = state,
-        modifier = modifier,
-        navigator = navigator,
-        webViewJsBridge = webViewJsBridge,
-        onCreated = { _ -> onCreated() },
-        onDispose = { _ -> onDispose() },
-    )
-}
+val LocalWebViewFactory = staticCompositionLocalOf<((WebViewFactoryParam) -> NativeWebView)?> { null }
 
 @Composable
 fun WebView(
@@ -35,9 +16,10 @@ fun WebView(
     navigator: WebViewNavigator = rememberWebViewNavigator(),
     webViewJsBridge: WebViewJsBridge? = null,
     onCreated: (NativeWebView) -> Unit = {},
-    onDispose: (NativeWebView) -> Unit = {},
-    factory: ((WebViewFactoryParam) -> NativeWebView)? = null,
+    onDispose: (NativeWebView) -> Unit = {}
 ) {
+    val factory = LocalWebViewFactory.current ?: ::defaultWebViewFactory
+
     val webView = state.webView
 
     webView?.let { wv ->
@@ -56,7 +38,7 @@ fun WebView(
         if (webViewJsBridge != null) {
             LaunchedEffect(wv, state) {
                 val loadingStateFlow =
-                    snapshotFlow { state.loadingState }.filter { it is LoadingState.Finished }
+                    snapshotFlow { state.loadingState }.filterIsInstance<LoadingState.Finished>()
                 val lastLoadedUrlFlow =
                     snapshotFlow { state.lastLoadedUrl }.filter { !it.isNullOrEmpty() }
 
@@ -76,7 +58,7 @@ fun WebView(
         webViewJsBridge = webViewJsBridge,
         onCreated = onCreated,
         onDispose = onDispose,
-        factory = factory ?: ::defaultWebViewFactory,
+        factory = factory
     )
 
     DisposableEffect(Unit) {
@@ -98,4 +80,3 @@ expect fun ActualWebView(
     onDispose: (NativeWebView) -> Unit = {},
     factory: (WebViewFactoryParam) -> NativeWebView = ::defaultWebViewFactory,
 )
-

@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalWasmJsInterop::class)
 package io.github.kdroidfilter.webview.web
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
@@ -206,66 +207,92 @@ actual fun ActualWebView(
         }
     }
 
-    HtmlView(
-        state = htmlViewState,
-        modifier = modifier,
-        navigator = htmlNavigator,
-        onCreated = { element ->
-            val nativeWebView = if (
-                state.webSettings.wasmJSWebSettings.let {
-                    it.backgroundColor != null ||
-                            it.showBorder ||
-                            it.enableSandbox ||
-                            it.customContainerStyle != null
-                }
-            ) {
-                createWebViewWithSettings(
-                    WebViewFactoryParam().apply {
-                        existingElement = element
-                    },
-                    state.webSettings
-                )
-            } else {
-                factory(
+    if (LocalWebViewFactory.current != null) {
+        Box(modifier) {
+            val scope = rememberCoroutineScope()
+            remember(state) {
+                // Create a dummy iframe for testing
+                val element = document.createElement("iframe") as HTMLIFrameElement
+                val nativeWebView = factory(
                     WebViewFactoryParam().apply {
                         existingElement = element
                     }
                 )
-            }
 
-            val webViewWrapper = WasmJsWebView(
-                element = element,
-                nativeWebView = nativeWebView,
-                scope = scope,
-                webViewJsBridge = webViewJsBridge,
-                onLoadStarted = { htmlViewState.loadingState = HtmlLoadingState.Loading },
-            )
+                val webViewWrapper = WasmJsWebView(
+                    element = element,
+                    nativeWebView = nativeWebView,
+                    scope = scope,
+                    webViewJsBridge = webViewJsBridge,
+                    onLoadStarted = { htmlViewState.loadingState = HtmlLoadingState.Loading },
+                )
 
-            state.webView = webViewWrapper
-
-            if (webViewJsBridge != null) {
-                bridgeCleanup.value = setupJsBridgeForWasm(element, webViewJsBridge, webViewWrapper)
-            }
-
-            if (state.content is WebContent.File) {
-                val fileName = (state.content as WebContent.File).fileName
-                val readType = (state.content as WebContent.File).readType
-                scope.launch {
-                    webViewWrapper.loadHtmlFile(fileName, readType)
-                }
-            }
-
-            onCreated(nativeWebView)
-        },
-        onDispose = { element ->
-            bridgeCleanup.value?.invoke()
-            bridgeCleanup.value = null
-            state.webView?.let {
-                onDispose(NativeWebView(element))
-                state.webView = null
+                state.webView = webViewWrapper
+                onCreated(nativeWebView)
             }
         }
-    )
+    } else {
+        HtmlView(
+            state = htmlViewState,
+            modifier = modifier,
+            navigator = htmlNavigator,
+            onCreated = { element ->
+                val nativeWebView = if (
+                    state.webSettings.wasmJSWebSettings.let {
+                        it.backgroundColor != null ||
+                                it.showBorder ||
+                                it.enableSandbox ||
+                                it.customContainerStyle != null
+                    }
+                ) {
+                    createWebViewWithSettings(
+                        WebViewFactoryParam().apply {
+                            existingElement = element
+                        },
+                        state.webSettings
+                    )
+                } else {
+                    factory(
+                        WebViewFactoryParam().apply {
+                            existingElement = element
+                        }
+                    )
+                }
+
+                val webViewWrapper = WasmJsWebView(
+                    element = element,
+                    nativeWebView = nativeWebView,
+                    scope = scope,
+                    webViewJsBridge = webViewJsBridge,
+                    onLoadStarted = { htmlViewState.loadingState = HtmlLoadingState.Loading },
+                )
+
+                state.webView = webViewWrapper
+
+                if (webViewJsBridge != null) {
+                    bridgeCleanup.value = setupJsBridgeForWasm(element, webViewJsBridge, webViewWrapper)
+                }
+
+                if (state.content is WebContent.File) {
+                    val fileName = (state.content as WebContent.File).fileName
+                    val readType = (state.content as WebContent.File).readType
+                    scope.launch {
+                        webViewWrapper.loadHtmlFile(fileName, readType)
+                    }
+                }
+
+                onCreated(nativeWebView)
+            },
+            onDispose = { element ->
+                bridgeCleanup.value?.invoke()
+                bridgeCleanup.value = null
+                state.webView?.let {
+                    onDispose(NativeWebView(element))
+                    state.webView = null
+                }
+            }
+        )
+    }
 }
 
 /**

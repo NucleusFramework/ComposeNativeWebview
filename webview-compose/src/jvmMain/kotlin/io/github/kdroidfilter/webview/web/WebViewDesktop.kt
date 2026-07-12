@@ -1,5 +1,6 @@
 package io.github.kdroidfilter.webview.web
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
@@ -11,7 +12,13 @@ import io.github.kdroidfilter.webview.jsbridge.parseJsMessage
 import io.github.kdroidfilter.webview.request.WebRequest
 import io.github.kdroidfilter.webview.request.WebRequestInterceptResult
 import io.github.kdroidfilter.webview.wry.Rgba
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
+import javax.imageio.ImageIO
+import kotlin.time.Duration.Companion.milliseconds
 
 actual class WebViewFactoryParam(
     val state: WebViewState,
@@ -79,7 +86,7 @@ actual fun ActualWebView(
 
     LaunchedEffect(desiredSettingsKey) {
         if (desiredSettingsKey != effectiveSettingsKey) {
-            delay(400)
+            delay(400.milliseconds)
             effectiveSettingsKey = desiredSettingsKey
         }
     }
@@ -103,21 +110,21 @@ actual fun ActualWebView(
             (state.cookieManager as? WryCookieManager)?.attach(nativeWebView)
         }
 
-        // Poll native state (URL/loading/title/nav) and drain IPC messages for JS bridge.
-        listOf(nativeWebView, state, navigator, webViewJsBridge).let {
-            LaunchedEffect(it) {
-                while (true) {
-                    if (!nativeWebView.isReady()) {
-                        if (state.loadingState !is LoadingState.Initializing) {
-                            state.loadingState = LoadingState.Initializing
-                        }
-                        delay(50)
-                        continue
+    // Poll native state (URL/loading/title/nav) and drain IPC messages for JS bridge.
+    listOf(nativeWebView, state, navigator, webViewJsBridge).let {
+        LaunchedEffect(it) {
+            while (true) {
+                if (!nativeWebView.isReady()) {
+                    if (state.loadingState !is LoadingState.Initializing) {
+                        state.loadingState = LoadingState.Initializing
                     }
+                    delay(50.milliseconds)
+                    continue
+                }
 
-                    val isLoading = nativeWebView.isLoading()
-                    state.loadingState =
-                        if (isLoading) {
+                val isLoading = nativeWebView.isLoading()
+                state.loadingState =
+                    if (isLoading) {
                             val next =
                                 when (val current = state.loadingState) {
                                     is LoadingState.Loading -> (current.progress + 0.02f).coerceAtMost(0.9f)
@@ -143,7 +150,7 @@ actual fun ActualWebView(
                     navigator.canGoBack = nativeWebView.canGoBack()
                     navigator.canGoForward = nativeWebView.canGoForward()
 
-                    delay(250)
+                    delay(250.milliseconds)
                 }
             }
 
@@ -154,7 +161,7 @@ actual fun ActualWebView(
                             parseJsMessage(raw)?.let { webViewJsBridge.dispatch(it) }
                         }
                     }
-                    delay(50)
+                    delay(50.milliseconds)
                 }
             }
         }
@@ -193,13 +200,21 @@ actual fun ActualWebView(
             }
         }
 
-        SwingPanel(
-            modifier = modifier,
-            factory = {
-                onCreated(nativeWebView)
-                nativeWebView
-            },
-        )
+        if (LocalWebViewFactory.current != null) {
+            Box(modifier) {
+                LaunchedEffect(nativeWebView) {
+                    onCreated(nativeWebView)
+                }
+            }
+        } else {
+            SwingPanel(
+                modifier = modifier,
+                factory = {
+                    onCreated(nativeWebView)
+                    nativeWebView
+                }
+            )
+        }
 
         DisposableEffect(nativeWebView) {
             onDispose {
@@ -218,4 +233,14 @@ private fun Color.toRgba(): Rgba {
     val g: UByte = ((argb ushr 8) and 0xFF).toUByte()
     val b: UByte = (argb and 0xFF).toUByte()
     return Rgba(r = r, g = g, b = b, a = a)
+}
+
+/**
+ * Captures a screenshot of the WebView and returns it as a [BufferedImage].
+ */
+suspend fun IWebView.toAwtImage(): BufferedImage? {
+    val bytes = captureScreenshotOrNull() ?: return null
+    return withContext(Dispatchers.IO) {
+        ImageIO.read(ByteArrayInputStream(bytes))
+    }
 }

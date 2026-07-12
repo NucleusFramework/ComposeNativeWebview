@@ -16,6 +16,13 @@ kotlin {
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(project(":demo-shared"))
         }
+
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.compose.ui.test)
+            implementation(libs.compose.ui.test.junit4)
+            implementation(project(":webview-compose-test"))
+        }
     }
 }
 

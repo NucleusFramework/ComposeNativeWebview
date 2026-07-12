@@ -2,7 +2,7 @@
 package io.github.kdroidfilter.webview.web
 
 import org.w3c.dom.Element
-import kotlin.js.JsAny
+import kotlin.js.Promise
 
 /**
  * Evaluate JavaScript in the iframe context
@@ -62,3 +62,36 @@ fun registerDomListener(target: JsAny?, type: String, callback: () -> Unit) {
         }"""
     )
 }
+
+/**
+ * Capture screenshot of the iframe using html2canvas if available
+ */
+fun captureScreenshotJs(
+    element: Element
+): Promise<JsAny?> = js(
+    //language=javascript
+    """
+    (async () => {
+        try {
+            if (!window.html2canvas) {
+                console.warn("html2canvas not found. captureScreenshot requires html2canvas library.");
+                return null;
+            }
+            const canvas = await window.html2canvas(element);
+            return new Promise(resolve => {
+                canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                        resolve(null);
+                        return;
+                    }
+                    const buffer = await blob.arrayBuffer();
+                    resolve(new Uint8Array(buffer));
+                }, 'image/png');
+            });
+        } catch (e) {
+            console.error("Screenshot capture failed:", e);
+            return null;
+        }
+    })()
+    """
+)

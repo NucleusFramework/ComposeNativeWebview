@@ -2,6 +2,8 @@ package io.github.kdroidfilter.webview.web
 
 import io.github.kdroidfilter.webview.jsbridge.WebViewJsBridge
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 expect class NativeWebView
 
@@ -49,6 +51,23 @@ interface IWebView {
         script: String,
         callback: ((String) -> Unit)? = null
     )
+
+    /**
+     * Captures a screenshot of the WebView.
+     * Returns a [ByteArray] containing the image data (typically PNG), or null if failed.
+     */
+    suspend fun captureScreenshotOrNull(): ByteArray?
+
+    /**
+     * Returns the HTML content of the WebView as a string.
+     */
+    suspend fun printToStringOrNull(): String? {
+        return suspendCancellableCoroutine { continuation ->
+            evaluateJavaScript("document.documentElement.outerHTML") { result ->
+                continuation.resume(result)
+            }
+        }
+    }
 
     suspend fun loadContent(content: WebContent) {
         when (content) {

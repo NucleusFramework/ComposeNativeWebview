@@ -1,5 +1,6 @@
 package io.github.kdroidfilter.webview.web
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,74 +41,90 @@ actual fun ActualWebView(
     val navigationDelegate = remember { WKNavigationDelegate(state, navigator) }
     val scope = rememberCoroutineScope()
 
-    UIKitView(
-        factory = {
-            val config =
-                WKWebViewConfiguration().apply {
-                    defaultWebpagePreferences.allowsContentJavaScript = state.webSettings.isJavaScriptEnabled
-                    preferences.apply {
-                        setValue(
-                            state.webSettings.allowFileAccessFromFileURLs,
-                            forKey = "allowFileAccessFromFileURLs",
-                        )
-                        javaScriptEnabled = state.webSettings.isJavaScriptEnabled
-                    }
-                    setValue(
-                        value = state.webSettings.allowUniversalAccessFromFileURLs,
-                        forKey = "allowUniversalAccessFromFileURLs",
-                    )
+    if (LocalWebViewFactory.current != null) {
+        Box(modifier) {
+            val scope = rememberCoroutineScope()
+            remember(state) {
+                val config = WKWebViewConfiguration()
+                factory(WebViewFactoryParam(config)).apply {
+                    onCreated(this)
+                    val iosWebView = IOSWebView(this, scope, webViewJsBridge)
+                    state.webView = iosWebView
+                    webViewJsBridge?.webView = iosWebView
                 }
-
-            factory(WebViewFactoryParam(config)).apply {
-                onCreated(this)
-
-                customUserAgent = state.webSettings.customUserAgentString
-
-                addProgressObservers(observer)
-                this.navigationDelegate = navigationDelegate
-
-                applyIOSSettings(this, state.webSettings)
-            }.also { wkWebView ->
-                val iosWebView = IOSWebView(wkWebView, scope, webViewJsBridge)
-                state.webView = iosWebView
-                webViewJsBridge?.webView = iosWebView
             }
-        },
-        modifier = modifier,
-        update = { wkWebView ->
-            wkWebView.customUserAgent = state.webSettings.customUserAgentString
+        }
+    } else {
+        UIKitView(
+            factory = {
+                val config =
+                    WKWebViewConfiguration().apply {
+                        defaultWebpagePreferences.allowsContentJavaScript = state.webSettings.isJavaScriptEnabled
+                        preferences.apply {
+                            setValue(
+                                state.webSettings.allowFileAccessFromFileURLs,
+                                forKey = "allowFileAccessFromFileURLs",
+                            )
+                            javaScriptEnabled = state.webSettings.isJavaScriptEnabled
+                        }
+                        setValue(
+                            value = state.webSettings.allowUniversalAccessFromFileURLs,
+                            forKey = "allowUniversalAccessFromFileURLs",
+                        )
+                    }
 
-            wkWebView.configuration.defaultWebpagePreferences.allowsContentJavaScript = state.webSettings.isJavaScriptEnabled
-            wkWebView.configuration.preferences.apply {
-                setValue(
-                    state.webSettings.allowFileAccessFromFileURLs,
-                    forKey = "allowFileAccessFromFileURLs",
+                factory(WebViewFactoryParam(config)).apply {
+                    onCreated(this)
+
+                    customUserAgent = state.webSettings.customUserAgentString
+
+                    addProgressObservers(observer)
+                    this.navigationDelegate = navigationDelegate
+
+                    applyIOSSettings(this, state.webSettings)
+                }.also { wkWebView ->
+                    val iosWebView = IOSWebView(wkWebView, scope, webViewJsBridge)
+                    state.webView = iosWebView
+                    webViewJsBridge?.webView = iosWebView
+                }
+            },
+            modifier = modifier,
+            update = { wkWebView ->
+                wkWebView.customUserAgent = state.webSettings.customUserAgentString
+
+                wkWebView.configuration.defaultWebpagePreferences.allowsContentJavaScript = state.webSettings.isJavaScriptEnabled
+                wkWebView.configuration.preferences.apply {
+                    setValue(
+                        state.webSettings.allowFileAccessFromFileURLs,
+                        forKey = "allowFileAccessFromFileURLs",
+                    )
+                    javaScriptEnabled = state.webSettings.isJavaScriptEnabled
+                }
+                wkWebView.configuration.setValue(
+                    value = state.webSettings.allowUniversalAccessFromFileURLs,
+                    forKey = "allowUniversalAccessFromFileURLs",
                 )
-                javaScriptEnabled = state.webSettings.isJavaScriptEnabled
-            }
-            wkWebView.configuration.setValue(
-                value = state.webSettings.allowUniversalAccessFromFileURLs,
-                forKey = "allowUniversalAccessFromFileURLs",
-            )
 
-            applyIOSSettings(wkWebView, state.webSettings)
-        },
-        onRelease = { wkWebView ->
-            state.webView = null
-            webViewJsBridge?.webView = null
+                applyIOSSettings(wkWebView, state.webSettings)
+            },
+            onRelease = { wkWebView ->
+                state.webView = null
+                webViewJsBridge?.webView = null
 
-            wkWebView.removeProgressObservers(observer)
-            wkWebView.configuration.userContentController.removeScriptMessageHandlerForName(IOS_JS_BRIDGE_HANDLER_NAME)
-            wkWebView.navigationDelegate = null
+                wkWebView.removeProgressObservers(observer)
+                wkWebView.configuration.userContentController.removeScriptMessageHandlerForName(
+                    IOS_JS_BRIDGE_HANDLER_NAME
+                )
+                wkWebView.navigationDelegate = null
 
-            onDispose(wkWebView)
-        },
-        properties =
-            UIKitInteropProperties(
+                onDispose(wkWebView)
+            },
+            properties = UIKitInteropProperties(
                 interactionMode = UIKitInteropInteractionMode.NonCooperative,
                 isNativeAccessibilityEnabled = true,
             ),
-    )
+        )
+    }
 }
 
 actual data class WebViewFactoryParam(
