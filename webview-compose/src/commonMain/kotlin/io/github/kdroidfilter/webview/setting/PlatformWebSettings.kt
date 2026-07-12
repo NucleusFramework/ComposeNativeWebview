@@ -10,6 +10,7 @@ sealed class PlatformWebSettings {
         var allowFileAccess: Boolean = false,
         var textZoom: Int = 100,
         var useWideViewPort: Boolean = false,
+        var domStorageEnabled: Boolean = false
     ) : PlatformWebSettings()
 
     data class DesktopWebSettings(
