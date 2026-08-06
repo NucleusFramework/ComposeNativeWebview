@@ -2,48 +2,43 @@
 
 ## Project Structure & Module Organization
 
-- `demo/`: Compose Desktop sample app (`demo/src/jvmMain/kotlin/...`).
 - `webview-compose/`: Compose Multiplatform WebView library exposing `dev.nucleusframework.webview.*`
   (`WebView`, `WebViewState`, `WebViewNavigator`).
   - Shared API/types: `webview-compose/src/commonMain/kotlin/...`.
   - Platform actuals: `.../src/jvmMain/` (desktop: Linux WebKit2GTK + macOS WKWebView + Windows WebView2),
     `.../src/androidMain/` (Android WebView),
     `.../src/iosMain/` (WKWebView + cinterop in `.../src/nativeInterop/`), `.../src/wasmJsMain/` (IFrame).
-- `webview-compose-test/`: JVM testing helpers (Playwright-backed mock WebView).
+  - Unit tests: `src/commonTest/` (JVM / Android host / iOS simulator / Wasm browser).
+- `e2e-shared/`: **shared multiplatform visual e2e suite** (`visualsuite/*` in `commonMain`) —
+  same catalog of cases on every platform; capabilities skip only what the host cannot do.
+- `e2e-desktop/`: desktop host (`./gradlew :e2e-desktop:run`, Nucleus Tao + real WebView).
+- `e2e-android/`, `e2e-wasmJs/`, `iosApp/`: same suite host apps (Android WebView / IFrame / WKWebView).
 - Generated/build outputs live under `*/build/` (don’t edit or commit).
 
 ## Build, Test, and Development Commands
 
 - `./gradlew build`: builds all modules.
-- `./gradlew :demo:run`: runs the desktop demo via the Nucleus application plugin
-  (Tao backend + WebKit2GTK on Linux / WKWebView on macOS / WebView2 on Windows; visual e2e suite entrypoint).
-- `./gradlew :webview-compose:buildNativeLinux`: builds
-  `libcompose_webview_linux.so` for the host arch into
-  `webview-compose/src/jvmMain/resources/nucleus/native/linux-{x64,aarch64}/`
-  (requires `libwebkit2gtk-4.1-dev` + `libgtk-3-dev` + JDK).
-  Or: `bash webview-compose/src/jvmMain/native/linux/build.sh`.
-- `./gradlew :webview-compose:buildNativeWindows`: builds
-  `compose_webview_windows.dll` + `WebView2Loader.dll` into
-  `webview-compose/src/jvmMain/resources/nucleus/native/win32-{x64,aarch64}/`
-  (requires MSVC, JDK with `JAVA_HOME`, network for first-run nuget WebView2 SDK).
-  Or: `webview-compose\src\jvmMain\native\windows\build.bat`.
-- `./gradlew :webview-compose:buildNativeMacos`: builds
-  `libcompose_webview_macos.dylib` for **both** arm64 and x86_64 into
-  `webview-compose/src/jvmMain/resources/nucleus/native/darwin-{aarch64,x64}/`
-  (requires Xcode CLT + JDK). Or: `bash webview-compose/src/jvmMain/native/macos/build.sh`.
-- CI: `.github/workflows/build-natives.yaml` matrix builds **linux-x64**
-  (`ubuntu-latest`), **linux-aarch64** (`ubuntu-24.04-arm`), **macos**
-  (`macos-14`, both darwin arches), and **windows-x64** (`windows-latest`),
-  uploads artifacts; PR/publish workflows download them before compile/publish.
-  Natives are **not** committed (see `.gitignore`).
-- GraalVM (demo): `nucleus.application { graalvm { isEnabled = true … } }`.
-  Library reachability metadata lives under
-  `webview-compose/src/jvmMain/resources/META-INF/native-image/dev.nucleusframework/composewebview/`
-  (JNI bridge + `nucleus/native/**` resources). Demo app metadata under
-  `demo/src/jvmMain/resources/META-INF/native-image/.../composewebview-demo/`.
-  Build a native image with `:demo:package` / Nucleus native-image tasks once
-  natives are present for the host OS.
-- `./gradlew :webview-compose:compileDebugKotlinAndroid`: compiles the Android implementation (requires Android SDK).
+- **Visual e2e (only real WebView suite)**:
+  - Desktop: `./gradlew :e2e-desktop:run` (exit 0/1)
+  - Android: `./gradlew :e2e-android:installDebug` then launch the app
+  - Wasm: `./gradlew :e2e-wasmJs:wasmJsBrowserDevelopmentRun`
+  - iOS: open `iosApp/iosApp.xcodeproj` in Xcode and Run
+- **Unit tests** (`commonTest`, same packages on every target):
+  ```bash
+  COMMON='--tests dev.nucleusframework.webview.jsbridge.* --tests dev.nucleusframework.webview.web.* --tests dev.nucleusframework.webview.request.* --tests dev.nucleusframework.webview.cookie.* --tests dev.nucleusframework.webview.setting.*'
+  ./gradlew :webview-compose:jvmTest $COMMON
+  ./gradlew :webview-compose:testDebugUnitTest $COMMON
+  ./gradlew :webview-compose:iosSimulatorArm64Test $COMMON   # macOS
+  ./gradlew :webview-compose:wasmJsBrowserTest $COMMON
+  ```
+- `./gradlew :webview-compose:buildNativeLinux` / `buildNativeMacos` / `buildNativeWindows`:
+  host native WebView backends into `webview-compose/src/jvmMain/resources/nucleus/native/…`
+  (not committed; CI matrix builds them).
+- CI: `.github/workflows/build-natives.yaml` + `.github/workflows/pr-build-check.yml`
+  (unit commonTest on all targets + visual e2e on desktop matrix + Android emulator).
+- GraalVM (e2e desktop): `nucleus.application { graalvm { isEnabled = true … } }`.
+  Library reachability metadata under
+  `webview-compose/src/jvmMain/resources/META-INF/native-image/dev.nucleusframework/composewebview/`.
 - `./gradlew clean`: removes Gradle build outputs.
 
 ## Coding Style & Naming Conventions
@@ -53,12 +48,16 @@
 
 ## Testing Guidelines
 
-- Kotlin tests (when added) should live in `*/src/jvmTest/kotlin` (or `commonTest`) and run with `./gradlew test`.
+- **Only** real WebView e2e lives in `e2e-shared` → `VisualSuiteApp` / `suiteCatalog()`.
+  Do not reintroduce jvmTest driver suites, Playwright, or `LocalWebViewFactory` mocks for coverage.
+- Unit logic that is platform-agnostic goes in `webview-compose/src/commonTest` and must run on
+  JVM, Android host, iOS simulator, and Wasm with the same packages.
+- Cases that need a missing [SuiteCapability] are **Skipped** (not Failed) so the catalog stays identical.
 
 ## Commit & Pull Request Guidelines
 
 - Commit messages follow a simple imperative style (e.g., “Add …”, “Fix …”, “Refactor …”) and mention the affected module/API when helpful.
-- PRs should include: a short rationale, steps to verify (`./gradlew :demo:run`), OS tested (Linux/macOS/Windows), and screenshots/GIFs for UI changes.
+- PRs should include: a short rationale, steps to verify (`./gradlew :e2e-desktop:run`), OS tested (Linux/macOS/Windows), and screenshots/GIFs for UI changes.
 
 ## Security & Configuration Tips
 

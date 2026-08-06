@@ -10,11 +10,25 @@ concurrency:
   group: pr-build-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Unit logic: webview-compose/src/commonTest (same packages on all targets).
+# Real WebView e2e: e2e-shared VisualSuiteApp via e2e-desktop / e2e-android / e2e-wasmJs / iosApp.
+# The old jvmTest driver suite and Playwright mocks are gone.
+
+env:
+  # Same filter string for every platform so CI cannot drift.
+  COMMON_TEST_ARGS: >-
+    --tests dev.nucleusframework.webview.jsbridge.*
+    --tests dev.nucleusframework.webview.web.*
+    --tests dev.nucleusframework.webview.request.*
+    --tests dev.nucleusframework.webview.cookie.*
+    --tests dev.nucleusframework.webview.setting.*
+
 jobs:
   build-natives:
     uses: ./.github/workflows/build-natives.yaml
 
-  build:
+  # ── Same commonTest suite on JVM ──────────────────────────────────────────
+  common-tests-jvm:
     needs: build-natives
     runs-on: ubuntu-latest
     steps:
@@ -27,18 +41,278 @@ jobs:
           pattern: 'natives-*'
           merge-multiple: true
 
-      - name: Verify natives present
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile all targets used by the library + e2e harness
+        run: >
+          ./gradlew
+          :webview-compose:compileKotlinJvm
+          :webview-compose:compileDebugKotlinAndroid
+          :webview-compose:compileKotlinWasmJs
+          :e2e-shared:compileKotlinJvm
+          :e2e-shared:compileDebugKotlinAndroid
+          :e2e-shared:compileKotlinWasmJs
+          :e2e-desktop:compileKotlinJvm
+          :e2e-android:compileDebugKotlinAndroid
+          :e2e-wasmJs:compileKotlinWasmJs
+          --no-configuration-cache
+
+      - name: commonTest on JVM (same packages as Android / iOS / Wasm)
+        run: ./gradlew :webview-compose:jvmTest ${{ env.COMMON_TEST_ARGS }} --no-configuration-cache
+
+  # ── Same commonTest suite on Wasm ─────────────────────────────────────────
+  common-tests-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: commonTest on Wasm browser + compile visual e2e host
+        run: >
+          ./gradlew
+          :webview-compose:wasmJsBrowserTest
+          ${{ env.COMMON_TEST_ARGS }}
+          :e2e-wasmJs:compileKotlinWasmJs
+          :e2e-shared:compileKotlinWasmJs
+          --no-configuration-cache
+
+  # ── Same commonTest suite on Android host + assemble visual e2e APK ───────
+  common-tests-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: commonTest + assemble Android visual e2e suite APK
+        run: >
+          ./gradlew
+          :webview-compose:testDebugUnitTest
+          ${{ env.COMMON_TEST_ARGS }}
+          :e2e-shared:compileDebugKotlinAndroid
+          :e2e-android:assembleDebug
+          --no-configuration-cache
+
+  # ── Android visual e2e (real WebView on emulator) ─────────────────────────
+  e2e-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
         run: |
-          EXPECTED=(
-            "webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
-            "webview-compose/src/jvmMain/resources/nucleus/native/linux-aarch64/libcompose_webview_linux.so"
-            "webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/compose_webview_windows.dll"
-            "webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/WebView2Loader.dll"
-            "webview-compose/src/jvmMain/resources/nucleus/native/darwin-aarch64/libcompose_webview_macos.dylib"
-            "webview-compose/src/jvmMain/resources/nucleus/native/darwin-x64/libcompose_webview_macos.dylib"
-          )
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run visual e2e suite on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          script: |
+            ./gradlew :e2e-android:installDebug --no-configuration-cache
+            adb logcat -c
+            adb uninstall dev.nucleusframework.webview.e2e >/dev/null 2>&1 || true
+            ./gradlew :e2e-android:installDebug --no-configuration-cache
+            adb logcat -c
+            adb shell am start -a android.intent.action.MAIN \
+              -c android.intent.category.LAUNCHER \
+              -n dev.nucleusframework.webview.e2e/.MainActivity
+            # Wait for suite log line (max ~12 min)
+            for i in $(seq 1 360); do
+              if adb logcat -d | grep -q 'SUITE_FINISHED'; then
+                adb logcat -d | grep -E 'SUITE_FINISHED|allGreen' | tail -10
+                if adb logcat -d | grep -q 'SUITE_FINISHED passed=true'; then
+                  echo "Android visual e2e PASSED"
+                  exit 0
+                else
+                  echo "Android visual e2e FAILED" >&2
+                  adb logcat -d | grep 'ComposeWebViewE2E' | tail -120
+                  exit 1
+                fi
+              fi
+              sleep 2
+            done
+            echo "Timed out waiting for SUITE_FINISHED" >&2
+            adb logcat -d | grep -E 'ComposeWebViewE2E|AndroidRuntime' | tail -120
+            exit 1
+
+  # ── Same commonTest suite on iOS simulator ────────────────────────────────
+  common-tests-ios:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: commonTest on iOS simulator (same packages)
+        run: >
+          ./gradlew
+          :webview-compose:iosSimulatorArm64Test
+          ${{ env.COMMON_TEST_ARGS }}
+          :e2e-shared:compileKotlinIosSimulatorArm64
+          --no-configuration-cache
+
+  # ── Desktop visual e2e (Linux WebKit2GTK) — real WebView, desktop-only ────
+  e2e-linux:
+    needs: build-natives
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+
+      - name: Verify Linux natives present
+        run: |
+          f="webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
+          test -f "$f" || { echo "MISSING: $f" >&2; exit 1; }
+          echo "OK: $f ($(wc -c < "$f") bytes)"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install WebKit2GTK runtime + Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libgtk-3-0 \
+            libwebkit2gtk-4.1-0 \
+            || sudo apt-get install -y \
+              xvfb \
+              libgtk-3-0 \
+              libwebkit2gtk-4.0-0
+
+      - name: Visual e2e suite (Tao + WebKit2GTK)
+        run: |
+          xvfb-run -a -s '-screen 0 1920x1080x24' \
+            ./gradlew :e2e-desktop:run --no-configuration-cache
+
+
+  # ── Desktop visual e2e (Windows WebView2) ─────────────────────────────────
+  e2e-windows:
+    needs: build-natives
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+
+      - name: Verify Windows natives present
+        shell: bash
+        run: |
+          f="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/compose_webview_windows.dll"
+          loader="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/WebView2Loader.dll"
+          test -f "$f" && test -f "$loader" || { echo "MISSING natives" >&2; exit 1; }
+          echo "OK: $f / $loader"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Visual e2e suite (Tao + WebView2)
+        run: ./gradlew :e2e-desktop:run --no-configuration-cache
+
+
+  # ── Desktop visual e2e (macOS WKWebView) ──────────────────────────────────
+  e2e-macos:
+    needs: build-natives
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+
+      - name: Verify macOS natives present
+        run: |
           MISSING=0
-          for f in "${EXPECTED[@]}"; do
+          for arch in aarch64 x64; do
+            f="webview-compose/src/jvmMain/resources/nucleus/native/darwin-${arch}/libcompose_webview_macos.dylib"
             if [ -f "$f" ]; then
               echo "OK: $f ($(wc -c < "$f") bytes)"
             else
@@ -54,21 +328,9 @@ jobs:
           java-version: '17'
           distribution: temurin
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Install runtime deps for compile (headers not required)
-        run: |
-          # No native rebuild here — artifacts already downloaded.
-          true
+      - name: Visual e2e suite (Tao + WKWebView)
+        run: ./gradlew :e2e-desktop:run --no-configuration-cache
 
-      - name: Build
-        run: >
-          ./gradlew
-          :webview-compose:compileKotlinJvm
-          :webview-compose:compileDebugKotlinAndroid
-          :demo:compileKotlinJvm
-          --no-configuration-cache

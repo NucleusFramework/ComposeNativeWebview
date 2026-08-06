@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.webkit.*
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +29,7 @@ actual fun ActualWebView(
     onCreated: (NativeWebView) -> Unit,
     onDispose: (NativeWebView) -> Unit,
     factory: (WebViewFactoryParam) -> NativeWebView,
+    content: @Composable () -> Unit,
 ) {
     AndroidWebViewContainer(
         state = state,
@@ -37,6 +39,7 @@ actual fun ActualWebView(
         onCreated = onCreated,
         onDispose = onDispose,
         factory = { ctx -> factory(WebViewFactoryParam(ctx)) },
+        content = content,
     )
 }
 
@@ -55,6 +58,7 @@ private fun AndroidWebViewContainer(
     onCreated: (WebView) -> Unit,
     onDispose: (WebView) -> Unit,
     factory: (Context) -> WebView,
+    content: @Composable () -> Unit,
 ) {
     if (LocalWebViewFactory.current != null) {
         val context = LocalContext.current
@@ -75,6 +79,7 @@ private fun AndroidWebViewContainer(
                     webViewJsBridge?.webView = androidWebView
                 }
             }
+            content()
         }
     } else {
         BoxWithConstraints(modifier) {
@@ -111,7 +116,7 @@ private fun AndroidWebViewContainer(
                         webViewJsBridge?.webView = androidWebView
                     }
                 },
-                modifier = Modifier,
+                modifier = Modifier.fillMaxSize(),
                 update = { webView ->
                     webView.layoutParams = layoutParams
                     configureSettings(webView, state.webSettings)
@@ -126,6 +131,7 @@ private fun AndroidWebViewContainer(
                     onDispose(webView)
                 },
             )
+            content()
         }
     }
 }

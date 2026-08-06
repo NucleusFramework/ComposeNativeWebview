@@ -9,6 +9,14 @@ import kotlinx.coroutines.flow.merge
 
 val LocalWebViewFactory = staticCompositionLocalOf<((WebViewFactoryParam) -> NativeWebView)?> { null }
 
+/**
+ * Multiplatform WebView composable.
+ *
+ * @param content Compose UI drawn **over** the embedded native WebView
+ * (same role as [dev.nucleusframework.window.tao.NativeView]'s content slot).
+ * On desktop this is required for overlays above the native surface; on
+ * Android / iOS / Wasm it is a regular Compose sibling layered on top.
+ */
 @Composable
 fun WebView(
     state: WebViewState,
@@ -16,7 +24,8 @@ fun WebView(
     navigator: WebViewNavigator = rememberWebViewNavigator(),
     webViewJsBridge: WebViewJsBridge? = null,
     onCreated: (NativeWebView) -> Unit = {},
-    onDispose: (NativeWebView) -> Unit = {}
+    onDispose: (NativeWebView) -> Unit = {},
+    content: @Composable () -> Unit = {},
 ) {
     val factory = LocalWebViewFactory.current ?: ::defaultWebViewFactory
 
@@ -30,8 +39,8 @@ fun WebView(
         }
 
         LaunchedEffect(wv, state) {
-            snapshotFlow { state.content }.collect { content ->
-                wv.loadContent(content)
+            snapshotFlow { state.content }.collect { pageContent ->
+                wv.loadContent(pageContent)
             }
         }
 
@@ -59,7 +68,8 @@ fun WebView(
         webViewJsBridge = webViewJsBridge,
         onCreated = onCreated,
         onDispose = onDispose,
-        factory = factory
+        factory = factory,
+        content = content,
     )
 
     DisposableEffect(Unit) {
@@ -80,4 +90,5 @@ expect fun ActualWebView(
     onCreated: (NativeWebView) -> Unit = {},
     onDispose: (NativeWebView) -> Unit = {},
     factory: (WebViewFactoryParam) -> NativeWebView = ::defaultWebViewFactory,
+    content: @Composable () -> Unit = {},
 )

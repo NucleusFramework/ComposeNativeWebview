@@ -5,7 +5,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 internal object AndroidCookieManager : CookieManager {
-    private val cookieManager: PlatformCookieManager = PlatformCookieManager.getInstance()
+    // Lazy: unit tests on the host JVM construct WebViewState without a real
+    // android.webkit.CookieManager runtime (getInstance needs a process).
+    private val cookieManager: PlatformCookieManager by lazy { PlatformCookieManager.getInstance() }
 
     override suspend fun setCookie(url: String, cookie: Cookie) {
         cookieManager.setCookie(url, cookie.toString())
@@ -39,8 +41,28 @@ internal object AndroidCookieManager : CookieManager {
 
     override suspend fun removeCookies(url: String) {
         val cookies = getCookies(url)
+        val host =
+            runCatching {
+                // android.net.Uri works without full URL parse edge cases
+                android.net.Uri.parse(url).host
+            }.getOrNull()
         for (cookie in cookies) {
+            // Expire with and without Domain — Android matches on attributes.
             cookieManager.setCookie(url, "${cookie.name}=; Max-Age=0; Path=/")
+            cookieManager.setCookie(
+                url,
+                "${cookie.name}=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/",
+            )
+            if (!host.isNullOrBlank()) {
+                cookieManager.setCookie(
+                    url,
+                    "${cookie.name}=; Max-Age=0; Path=/; Domain=$host",
+                )
+                cookieManager.setCookie(
+                    url,
+                    "${cookie.name}=; Max-Age=0; Path=/; Domain=.$host",
+                )
+            }
         }
         cookieManager.flush()
     }

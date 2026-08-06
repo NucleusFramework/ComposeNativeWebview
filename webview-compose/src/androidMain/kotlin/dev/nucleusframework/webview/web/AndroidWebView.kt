@@ -95,11 +95,14 @@ internal class AndroidWebView(
     }
 
     override fun evaluateJavaScript(script: String, callback: ((String) -> Unit)?) {
-        val androidScript = "javascript:$script"
-        KLogger.d {
-            "evaluateJavaScript: $androidScript"
+        // evaluateJavascript must run on the WebView/UI thread (not the binder
+        // thread used by @JavascriptInterface).
+        nativeWebView.post {
+            KLogger.d { "evaluateJavaScript: $script" }
+            nativeWebView.evaluateJavascript(script) { result ->
+                callback?.invoke(result ?: "")
+            }
         }
-        nativeWebView.evaluateJavascript(androidScript, callback)
     }
 
     override fun injectJsBridge() {
@@ -122,10 +125,13 @@ internal class AndroidWebView(
 
     @JavascriptInterface
     fun call(raw: String) {
-        parseJsMessage(raw)?.let { message ->
-            webViewJsBridge?.dispatch(message)
-        } ?: run {
-            KLogger.w(tag = "AndroidWebView") { "Invalid JS message: $raw" }
+        // Hop to the WebView thread before dispatch/callback evaluation.
+        nativeWebView.post {
+            parseJsMessage(raw)?.let { message ->
+                webViewJsBridge?.dispatch(message)
+            } ?: run {
+                KLogger.w(tag = "AndroidWebView") { "Invalid JS message: $raw" }
+            }
         }
     }
 }

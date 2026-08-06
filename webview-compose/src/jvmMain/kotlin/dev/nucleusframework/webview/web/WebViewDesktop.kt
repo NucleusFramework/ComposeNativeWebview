@@ -128,6 +128,7 @@ actual fun ActualWebView(
     onCreated: (NativeWebView) -> Unit,
     onDispose: (NativeWebView) -> Unit,
     factory: (WebViewFactoryParam) -> NativeWebView,
+    content: @Composable () -> Unit,
 ) {
     val currentOnDispose by rememberUpdatedState(onDispose)
     val scope = rememberCoroutineScope()
@@ -291,6 +292,7 @@ actual fun ActualWebView(
                 factory = { linuxWebView.asPlatformView() },
                 modifier = modifier,
                 update = { },
+                content = content,
             )
             LaunchedEffect(nativeWebView) {
                 onCreated(nativeWebView)
@@ -301,6 +303,7 @@ actual fun ActualWebView(
                 factory = { macosWebView.asPlatformView() },
                 modifier = modifier,
                 update = { },
+                content = content,
             )
             LaunchedEffect(nativeWebView) {
                 onCreated(nativeWebView)
@@ -311,17 +314,19 @@ actual fun ActualWebView(
                 factory = { windowsWebView.asPlatformView() },
                 modifier = modifier,
                 update = { },
+                content = content,
             )
             LaunchedEffect(nativeWebView) {
                 onCreated(nativeWebView)
             }
         }
         else -> {
-            // Test factory / unsupported / no-op: empty layout slot.
+            // Test factory / unsupported / no-op: empty layout slot + overlay.
             Box(modifier) {
                 LaunchedEffect(nativeWebView) {
                     onCreated(nativeWebView)
                 }
+                content()
             }
         }
     }

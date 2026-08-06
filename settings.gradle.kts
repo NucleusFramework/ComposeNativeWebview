@@ -34,9 +34,8 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-include(":demo")
-include(":demo-shared")
-include(":demo-android")
-include(":demo-wasmJs")
+include(":e2e-desktop")
+include(":e2e-shared")
+include(":e2e-android")
+include(":e2e-wasmJs")
 include(":webview-compose")
-include(":webview-compose-test")

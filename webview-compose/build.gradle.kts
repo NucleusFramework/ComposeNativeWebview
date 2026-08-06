@@ -13,13 +13,6 @@ plugins {
     alias(libs.plugins.mavenPublish)
 }
 
-// Real WebView e2e needs a display (WebKit2GTK + Tao). Don't fail the whole
-// build when DISPLAY is missing (CI without xvfb) — tests self-skip.
-tasks.withType<Test>().configureEach {
-    // Each e2e suite owns the Tao event loop once per process.
-    maxParallelForks = 1
-}
-
 // ── Native build (Linux / macOS / Windows) ──────────────────────────────────
 // Same pattern as Nucleus: compile host-arch natives into
 // src/jvmMain/resources/nucleus/native/{linux,darwin,win32}-{x64,aarch64}/.
@@ -139,6 +132,10 @@ kotlin {
             implementation(libs.kotlinx.serializationJson)
         }
 
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutinesAndroid)
         }
@@ -148,15 +145,6 @@ kotlin {
             // Desktop WebView embeds via NativeView and requires the Tao backend.
             api(libs.nucleus.decorated.window.tao)
             implementation(libs.nucleus.core.runtime)
-        }
-
-        jvmTest.dependencies {
-            implementation(kotlin("test"))
-            implementation(libs.compose.ui.test)
-            implementation(libs.compose.ui.test.junit4)
-            implementation(compose.desktop.currentOs)
-            implementation(libs.nucleus.application)
-            implementation(libs.kotlinx.coroutinesSwing)
         }
 
         iosMain.dependencies { }

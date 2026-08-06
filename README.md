@@ -46,7 +46,10 @@ If you already know **compose-webview-multiplatform**, you already know how to u
 @Composable
 fun App() {
   val state = rememberWebViewState("https://example.com")
-  WebView(state, Modifier.fillMaxSize())
+  WebView(state, Modifier.fillMaxSize()) {
+    // Optional Compose overlay on top of the native WebView
+    // (NativeView content slot on desktop; Box overlay elsewhere).
+  }
 }
 ```
 
@@ -68,19 +71,35 @@ Same artifact for **Android, iOS, Desktop and WasmJs**.
 
 ---
 
-## Demo app
+## E2E harness & tests
 
-Run the feature showcase first:
+### Visual e2e suite (same catalog everywhere)
 
-* **Desktop**: `./gradlew :demo:run` (Nucleus application plugin; visual e2e suite on Linux)
-* **Android**: `./gradlew :demo-android:installDebug`
-* **WasmJs**: `./gradlew :demo-wasmJs:wasmJsBrowserDevelopmentRun`
-* **iOS**: open `iosApp/iosApp.xcodeproj` in Xcode and Run
+`VisualSuiteApp` + `suiteCatalog()` live in **`e2e-shared` commonMain**.
+Every platform host runs that same suite against a **real** WebView:
 
-Responsive UI:
+| Host | Command | Backend |
+|------|---------|---------|
+| Desktop | `./gradlew :e2e-desktop:run` | Tao + WebKit2GTK / WKWebView / WebView2 |
+| Android | `./gradlew :e2e-android:installDebug` then launch app | `android.webkit.WebView` |
+| Wasm | `./gradlew :e2e-wasmJs:wasmJsBrowserDevelopmentRun` | IFrame |
+| iOS | open `iosApp` in Xcode and Run | WKWebView |
 
-* large screens → side **Tools** panel
-* phones → **bottom sheet**
+Cases that need a platform-only capability (history on Wasm, isolated native
+profiles on desktop, pixel screenshots, …) are **Skipped** with a reason —
+not Failed — so the catalog stays identical.
+
+### Unit suite (`commonTest`)
+
+Same pure-logic packages on JVM / Android host / iOS simulator / Wasm browser:
+
+```bash
+COMMON='--tests dev.nucleusframework.webview.jsbridge.* --tests dev.nucleusframework.webview.web.* --tests dev.nucleusframework.webview.request.* --tests dev.nucleusframework.webview.cookie.* --tests dev.nucleusframework.webview.setting.*'
+./gradlew :webview-compose:jvmTest $COMMON
+./gradlew :webview-compose:testDebugUnitTest $COMMON
+./gradlew :webview-compose:iosSimulatorArm64Test $COMMON   # macOS
+./gradlew :webview-compose:wasmJsBrowserTest $COMMON
+```
 
 ---
 
@@ -203,10 +222,9 @@ state.webSettings.logSeverity = KLogSeverity.Debug
 
 ## Project structure
 
-* `webview-compose/` → Compose Multiplatform API + platform actuals
-* `webview-compose-test/` → Playwright-based test helpers (JVM)
-* `demo-shared/` → shared demo UI
-* `demo/`, `demo-android/`, `demo-wasmJs/`, `iosApp/` → platform launchers
+* `webview-compose/` → Compose Multiplatform API + platform actuals + commonTest
+* `e2e-shared/` → shared multiplatform visual e2e suite (`VisualSuiteApp`)
+* `e2e-desktop/`, `e2e-android/`, `e2e-wasmJs/`, `iosApp/` → platform hosts for that suite
 
 ---
 
