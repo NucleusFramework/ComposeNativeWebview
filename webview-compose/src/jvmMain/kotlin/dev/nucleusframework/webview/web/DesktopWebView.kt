@@ -3,6 +3,7 @@ package dev.nucleusframework.webview.web
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
 import dev.nucleusframework.webview.util.KLogger
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView
 import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import java.net.URL
 import kotlinx.coroutines.CoroutineScope
@@ -10,9 +11,8 @@ import kotlinx.coroutines.CoroutineScope
 /**
  * Desktop [IWebView] implementation.
  *
- * On Linux (WebKit2GTK) and Windows (WebView2) via Tao/NativeView all
- * operations hit the real native backend. On other desktop OSes this
- * remains a no-op shell.
+ * On Linux (WebKit2GTK), macOS (WKWebView) and Windows (WebView2) via
+ * Tao/NativeView all operations hit the real native backend.
  */
 internal class DesktopWebView(
     override val nativeWebView: NativeWebView,
@@ -44,6 +44,7 @@ internal class DesktopWebView(
         if (html == null) return
         when (val native = nativeWebView) {
             is LinuxWebKitNativeWebView -> native.loadHtml(html, baseUrl)
+            is MacOsWebKitNativeWebView -> native.loadHtml(html, baseUrl)
             is WindowsWebView2NativeWebView -> native.loadHtml(html, baseUrl)
             else -> nativeWebView.loadHtml(html)
         }
@@ -122,6 +123,7 @@ internal class DesktopWebView(
     override suspend fun captureScreenshotOrNull(): ByteArray? {
         when (val native = nativeWebView) {
             is LinuxWebKitNativeWebView -> return native.captureScreenshotAsync()
+            is MacOsWebKitNativeWebView -> return native.captureScreenshotAsync()
             is WindowsWebView2NativeWebView -> return native.captureScreenshotAsync()
         }
         return nativeWebView.captureScreenshotNative()
@@ -144,7 +146,7 @@ internal class DesktopWebView(
 
     override fun initJsBridge(webViewJsBridge: WebViewJsBridge) {
         // IPC is wired natively:
-        //  - Linux: WebKit user-content script message handler "ipc"
+        //  - Linux/macOS: WebKit user-content script message handler "ipc"
         //  - Windows: window.ipc -> chrome.webview.postMessage
     }
 }

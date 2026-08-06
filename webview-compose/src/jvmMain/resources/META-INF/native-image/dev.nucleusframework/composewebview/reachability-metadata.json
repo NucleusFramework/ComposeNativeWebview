@@ -14,6 +14,19 @@
       ]
     },
     {
+      "type": "dev.nucleusframework.webview.web.macos.WebKitMacOsBridge",
+      "jniAccessible": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true,
+      "methods": [
+        { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnJsResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnCookiesResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnScreenshotResult", "parameterTypes": ["long", "byte[]"] }
+      ]
+    },
+    {
       "type": "dev.nucleusframework.webview.web.windows.WebView2WindowsBridge",
       "jniAccessible": true,
       "allDeclaredMethods": true,
@@ -28,6 +41,12 @@
     },
     {
       "type": "dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView",
       "allDeclaredConstructors": true,
       "allDeclaredMethods": true,
       "allDeclaredFields": true
@@ -89,6 +108,16 @@
   "jni": [
     {
       "type": "dev.nucleusframework.webview.web.linux.WebKitLinuxBridge",
+      "methods": [
+        { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnJsResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnCookiesResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnScreenshotResult", "parameterTypes": ["long", "byte[]"] }
+      ]
+    },
+    {
+      "type": "dev.nucleusframework.webview.web.macos.WebKitMacOsBridge",
       "methods": [
         { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
         { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },

@@ -1,10 +1,26 @@
-# Keep the Linux WebKit JNI bridge — native-image / ProGuard would otherwise
-# strip callbacks reached only from libcompose_webview_linux.so.
+# Keep desktop WebKit / WebView2 JNI bridges — native-image / ProGuard would
+# otherwise strip callbacks reached only from the native libs.
 -keep class dev.nucleusframework.webview.web.linux.WebKitLinuxBridge {
     public static *;
     public *;
 }
 -keep class dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView {
+    <init>(...);
+    public *;
+}
+-keep class dev.nucleusframework.webview.web.macos.WebKitMacOsBridge {
+    public static *;
+    public *;
+}
+-keep class dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView {
+    <init>(...);
+    public *;
+}
+-keep class dev.nucleusframework.webview.web.windows.WebView2WindowsBridge {
+    public static *;
+    public *;
+}
+-keep class dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView {
     <init>(...);
     public *;
 }

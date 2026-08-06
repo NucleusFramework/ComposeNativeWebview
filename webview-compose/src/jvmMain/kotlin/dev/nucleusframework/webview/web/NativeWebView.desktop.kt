@@ -5,8 +5,8 @@ package dev.nucleusframework.webview.web
  *
  * With the Tao backend, the default factory creates:
  *  - [dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView] on Linux
+ *  - [dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView] on macOS
  *  - [dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView] on Windows
- * macOS remains a no-op until the WKWebView backend lands.
  */
 actual open class NativeWebView {
     open fun isReady(): Boolean = false

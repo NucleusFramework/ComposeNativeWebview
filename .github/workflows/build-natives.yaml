@@ -3,13 +3,12 @@ name: Build Native Libraries
 on:
   workflow_call:
 
-# Native binaries are a pure function of the C/C++ sources. Each platform job
-# caches its output tree keyed on a hash of every src/**/native/** file (plus
-# this workflow). On a cache hit the compile steps are skipped and the job only
-# verifies + re-uploads the artifact for downstream consumers.
+# Native binaries are a pure function of the C/C++/ObjC sources. Each platform
+# job caches its output tree keyed on a hash of every src/**/native/** file
+# (plus this workflow). On a cache hit the compile steps are skipped and the
+# job only verifies + re-uploads the artifact for downstream consumers.
 #
-# Platforms: Linux (WebKit2GTK) + Windows (WebView2). macOS stays no-op until
-# the WKWebView backend lands.
+# Platforms: Linux (WebKit2GTK) + macOS (WKWebView) + Windows (WebView2).
 #
 # Bump the `natives-v1` prefix to force a full rebuild.
 
@@ -84,6 +83,57 @@ jobs:
         with:
           name: natives-linux-${{ matrix.arch }}
           path: 'webview-compose/src/jvmMain/resources/nucleus/native/linux-*/'
+          retention-days: 1
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Restore native output cache
+        id: natives-cache
+        uses: actions/cache@v4
+        with:
+          path: 'webview-compose/src/jvmMain/resources/nucleus/native/darwin-*'
+          key: natives-v1-macos-${{ hashFiles('webview-compose/src/jvmMain/native/**', '.github/workflows/build-natives.yaml') }}
+
+      - name: Setup JDK 21
+        if: steps.natives-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build compose WebView macOS native library
+        if: steps.natives-cache.outputs.cache-hit != 'true'
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        run: bash webview-compose/src/jvmMain/native/macos/build.sh
+
+      - name: Verify macOS natives
+        run: |
+          MISSING=0
+          for arch in aarch64 x64; do
+            f="webview-compose/src/jvmMain/resources/nucleus/native/darwin-${arch}/libcompose_webview_macos.dylib"
+            if [ -f "$f" ]; then
+              echo "OK: $f ($(wc -c < "$f") bytes)"
+              file "$f" || true
+            else
+              echo "MISSING: $f" >&2
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" = "1" ]; then
+            find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Upload macOS natives
+        uses: actions/upload-artifact@v4
+        with:
+          name: natives-macos
+          path: 'webview-compose/src/jvmMain/resources/nucleus/native/darwin-*/'
           retention-days: 1
 
   windows:

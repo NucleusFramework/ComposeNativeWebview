@@ -20,13 +20,14 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = 1
 }
 
-// ── Native build (Linux WebKit2GTK / Windows WebView2) ──────────────────────
+// ── Native build (Linux / macOS / Windows) ──────────────────────────────────
 // Same pattern as Nucleus: compile host-arch natives into
-// src/jvmMain/resources/nucleus/native/{linux,win32}-{x64,aarch64}/.
+// src/jvmMain/resources/nucleus/native/{linux,darwin,win32}-{x64,aarch64}/.
 // CI builds via matrix and downloads artifacts before package/publish.
-// Locally, only the host arch is built (and only if the artifact is missing).
+// Locally, only the host platform is built (and only if the artifact is missing).
 
 val nativeLinuxDir = layout.projectDirectory.dir("src/jvmMain/native/linux")
+val nativeMacosDir = layout.projectDirectory.dir("src/jvmMain/native/macos")
 val nativeWindowsDir = layout.projectDirectory.dir("src/jvmMain/native/windows")
 val nativeResourceDir = layout.projectDirectory.dir("src/jvmMain/resources/nucleus/native")
 
@@ -45,6 +46,21 @@ val buildNativeLinux by tasks.registering(Exec::class) {
     inputs.dir(nativeLinuxDir)
     outputs.file(checkFile)
     workingDir(nativeLinuxDir.asFile)
+    commandLine("bash", "build.sh")
+}
+
+val buildNativeMacos by tasks.registering(Exec::class) {
+    description = "Compiles the WKWebView JNI backend into libcompose_webview_macos.dylib"
+    group = "build"
+    // build.sh produces both arm64 and x86_64 dylibs.
+    val checkArm = nativeResourceDir.file("darwin-aarch64/libcompose_webview_macos.dylib").asFile
+    val checkX64 = nativeResourceDir.file("darwin-x64/libcompose_webview_macos.dylib").asFile
+    onlyIf {
+        Os.isFamily(Os.FAMILY_MAC) && (!checkArm.exists() || !checkX64.exists())
+    }
+    inputs.dir(nativeMacosDir)
+    outputs.files(checkArm, checkX64)
+    workingDir(nativeMacosDir.asFile)
     commandLine("bash", "build.sh")
 }
 
@@ -81,12 +97,12 @@ tasks.matching {
         it.name == "processJvmMainResources" ||
         it.name == "jvmJar"
 }.configureEach {
-    dependsOn(buildNativeLinux, buildNativeWindows)
+    dependsOn(buildNativeLinux, buildNativeMacos, buildNativeWindows)
 }
 
 tasks.configureEach {
     if (name == "sourcesJar" || name == "jvmSourcesJar") {
-        dependsOn(buildNativeLinux, buildNativeWindows)
+        dependsOn(buildNativeLinux, buildNativeMacos, buildNativeWindows)
     }
 }
 

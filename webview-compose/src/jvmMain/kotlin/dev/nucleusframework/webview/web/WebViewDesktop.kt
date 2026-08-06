@@ -17,6 +17,8 @@ import dev.nucleusframework.webview.request.WebRequest
 import dev.nucleusframework.webview.request.WebRequestInterceptResult
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
 import dev.nucleusframework.webview.web.linux.WebKitLinuxBridge
+import dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView
+import dev.nucleusframework.webview.web.macos.WebKitMacOsBridge
 import dev.nucleusframework.webview.web.windows.WebView2WindowsBridge
 import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import dev.nucleusframework.window.tao.LocalTaoWindow
@@ -37,9 +39,8 @@ actual class WebViewFactoryParam(
 )
 
 /**
- * Default factory: real WebKit2GTK on Linux / WebView2 on Windows when the
- * native lib loads and (Windows) a parent HWND is available; no-op on macOS
- * or when the lib / HWND is missing.
+ * Default factory: real WebKit2GTK on Linux, WKWebView on macOS, WebView2 on
+ * Windows when the native lib loads (and Windows parent HWND is available).
  */
 actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
     val settings = param.state.webSettings
@@ -54,6 +55,20 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
 
     if (Platform.Current == Platform.Linux && WebKitLinuxBridge.isLoaded) {
         return LinuxWebKitNativeWebView(
+            customUserAgent = settings.customUserAgentString,
+            dataDirectory = desktop.dataDirectory,
+            initScript = desktop.initScript,
+            incognito = desktop.incognito,
+            enableDevtools = desktop.enableDevtools,
+            javascriptEnabled = settings.isJavaScriptEnabled,
+            zoomLevel = settings.zoomLevel,
+            transparent = desktop.transparent,
+            backgroundColor = background,
+        )
+    }
+
+    if (Platform.Current == Platform.MacOS && WebKitMacOsBridge.isLoaded) {
+        return MacOsWebKitNativeWebView(
             customUserAgent = settings.customUserAgentString,
             dataDirectory = desktop.dataDirectory,
             initScript = desktop.initScript,
@@ -89,14 +104,16 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
 }
 
 private fun NativeWebView.isLiveBackend(): Boolean =
-    this is LinuxWebKitNativeWebView || this is WindowsWebView2NativeWebView
+    this is LinuxWebKitNativeWebView ||
+        this is MacOsWebKitNativeWebView ||
+        this is WindowsWebView2NativeWebView
 
 /**
  * Desktop WebView composable.
  *
  * **Linux + Tao**: embeds a real WebKit2GTK view via [NativeView].
+ * **macOS + Tao**: embeds a real WKWebView via [NativeView].
  * **Windows + Tao**: embeds a real WebView2 view via [NativeView] (DComp).
- * **macOS**: empty box (no-op backend until WKWebView lands).
  *
  * Outside a Tao [dev.nucleusframework.application.DecoratedWindow],
  * [NativeView] falls back to an empty box — the WebView only works with
@@ -266,11 +283,22 @@ actual fun ActualWebView(
     }
 
     val linuxWebView = nativeWebView as? LinuxWebKitNativeWebView
+    val macosWebView = nativeWebView as? MacOsWebKitNativeWebView
     val windowsWebView = nativeWebView as? WindowsWebView2NativeWebView
     when {
         linuxWebView != null && LocalWebViewFactory.current == null -> {
             NativeView(
                 factory = { linuxWebView.asPlatformView() },
+                modifier = modifier,
+                update = { },
+            )
+            LaunchedEffect(nativeWebView) {
+                onCreated(nativeWebView)
+            }
+        }
+        macosWebView != null && LocalWebViewFactory.current == null -> {
+            NativeView(
+                factory = { macosWebView.asPlatformView() },
                 modifier = modifier,
                 update = { },
             )
@@ -289,7 +317,7 @@ actual fun ActualWebView(
             }
         }
         else -> {
-            // Test factory / non-Linux-non-Windows / no-op: empty layout slot.
+            // Test factory / unsupported / no-op: empty layout slot.
             Box(modifier) {
                 LaunchedEffect(nativeWebView) {
                     onCreated(nativeWebView)

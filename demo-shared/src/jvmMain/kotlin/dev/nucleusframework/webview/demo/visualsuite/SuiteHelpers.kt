@@ -5,6 +5,7 @@ import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.webview.web.WebViewNavigator
 import dev.nucleusframework.webview.web.WebViewState
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView
 import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -66,7 +67,11 @@ internal suspend fun evalJsUnquoted(
 internal fun NativeWebView?.isLiveDesktopBackend(): Boolean =
     this != null &&
         isReady() &&
-        (this is LinuxWebKitNativeWebView || this is WindowsWebView2NativeWebView)
+        (
+            this is LinuxWebKitNativeWebView ||
+                this is MacOsWebKitNativeWebView ||
+                this is WindowsWebView2NativeWebView
+            )
 
 internal suspend fun waitWebView(
     state: WebViewState,
@@ -78,16 +83,17 @@ internal suspend fun waitWebView(
             // wait for a live backend, not just a non-null DesktopWebView shell.
             while (!state.webView?.nativeWebView.isLiveDesktopBackend()) delay(40)
         }
-    } catch (t: kotlinx.coroutines.TimeoutCancellationException) {
+    } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
         val nv = state.webView?.nativeWebView
         error(
             "Desktop WebView native backend not ready after ${timeoutMs}ms " +
                 "(webView=${state.webView != null}, native=${nv?.let { it::class.simpleName }}, " +
                 "ready=${nv?.isReady()}). " +
-                "On Windows build natives first: " +
-                "`./gradlew :webview-compose:buildNativeWindows` " +
-                "or `webview-compose\\src\\jvmMain\\native\\windows\\build.bat` " +
-                "(requires MSVC + JAVA_HOME + WebView2 Runtime).",
+                "Build host natives first: " +
+                "Linux `./gradlew :webview-compose:buildNativeLinux`, " +
+                "macOS `./gradlew :webview-compose:buildNativeMacos`, " +
+                "Windows `./gradlew :webview-compose:buildNativeWindows` " +
+                "(MSVC + JAVA_HOME + WebView2 Runtime).",
         )
     }
 }

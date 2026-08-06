@@ -58,7 +58,7 @@ private val TextDim = Color(0xFF93A0B8)
 
 /**
  * Full visual e2e suite: real Tao window, real desktop WebView
- * (WebKit2GTK on Linux / WebView2 on Windows), every major API path.
+ * (WebKit2GTK / WKWebView / WebView2), every major API path.
  * Writes a machine-readable report and calls [onFinished] with success flag.
  */
 @Composable
@@ -185,37 +185,59 @@ fun VisualSuiteApp(
                 getOnCreatedFired = { onCreatedFired },
             )
         val started = System.currentTimeMillis()
-        runFullSuite(ctx) { id, status, detail ->
-            currentId = id
-            updateCase(id, status, detail)
-            summary =
-                when (status) {
-                    CaseStatus.Running -> "Running $id…"
-                    CaseStatus.Passed -> "$id PASS"
-                    CaseStatus.Failed -> "$id FAIL: $detail"
-                    CaseStatus.Skipped -> "$id SKIP: $detail"
-                    else -> summary
-                }
-        }
-        val finished = System.currentTimeMillis()
-        val report =
-            SuiteReport(
-                startedAtMs = started,
-                finishedAtMs = finished,
-                cases = cases.toList(),
-            )
-        val path = writeSuiteReport(report)
-        val passed = report.allGreen
-        summary =
-            if (passed) {
-                "ALL GREEN  ${report.passed}/${report.total}  (${finished - started}ms)"
-            } else {
-                "FAILED  pass=${report.passed} fail=${report.failed} skip=${report.skipped}  report=$path"
+        var path = ""
+        var passed = false
+        try {
+            runFullSuite(ctx) { id, status, detail ->
+                currentId = id
+                updateCase(id, status, detail)
+                summary =
+                    when (status) {
+                        CaseStatus.Running -> "Running $id…"
+                        CaseStatus.Passed -> "$id PASS"
+                        CaseStatus.Failed -> "$id FAIL: $detail"
+                        CaseStatus.Skipped -> "$id SKIP: $detail"
+                        else -> summary
+                    }
             }
-        done = true
-        // Keep the window visible long enough to inspect, then notify host.
-        delay(if (passed) 2500 else 8000)
-        onFinished(passed, path)
+        } catch (t: Throwable) {
+            // Real cancellation (window disposed) must propagate.
+            if (t is kotlinx.coroutines.CancellationException) throw t
+            // Other failures (incl. waitWebView error()) must still exit the demo.
+            val msg = t.message ?: t::class.simpleName ?: "suite aborted"
+            summary = "ABORTED: $msg"
+            if (cases.none { it.status == CaseStatus.Failed }) {
+                val firstPending = cases.indexOfFirst { it.status == CaseStatus.Pending }
+                if (firstPending >= 0) {
+                    updateCase(cases[firstPending].id, CaseStatus.Failed, msg)
+                }
+            }
+        } finally {
+            val finished = System.currentTimeMillis()
+            val report =
+                SuiteReport(
+                    startedAtMs = started,
+                    finishedAtMs = finished,
+                    cases = cases.toList(),
+                )
+            path = writeSuiteReport(report)
+            passed = report.allGreen
+            summary =
+                if (passed) {
+                    "ALL GREEN  ${report.passed}/${report.total}  (${finished - started}ms)"
+                } else {
+                    "FAILED  pass=${report.passed} fail=${report.failed} skip=${report.skipped}  report=$path"
+                }
+            done = true
+            // Keep the window visible long enough to inspect, then notify host.
+            // Use NonCancellable delay path isn't needed; host exitProcess cleans up.
+            try {
+                delay(if (passed) 1500 else 4000)
+            } catch (_: Throwable) {
+                // ignore cancellation during teardown
+            }
+            onFinished(passed, path)
+        }
     }
 
     // Auto-scroll running case into view

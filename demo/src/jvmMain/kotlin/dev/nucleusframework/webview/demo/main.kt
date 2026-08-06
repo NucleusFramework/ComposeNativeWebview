@@ -13,8 +13,8 @@ import kotlin.system.exitProcess
 /**
  * Full visual e2e suite entrypoint.
  *
- * Runs a real Tao window + desktop WebView (WebKit2GTK / WebView2) and
- * exercises the full desktop API. Writes a report under java.io.tmpdir
+ * Runs a real Tao window + desktop WebView (WebKit2GTK / WKWebView / WebView2)
+ * and exercises the full desktop API. Writes a report under java.io.tmpdir
  * (or `$COMPOSEWEBVIEW_SUITE_REPORT`) and exits 0/1.
  *
  *   ./gradlew :demo:run

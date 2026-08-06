@@ -49,12 +49,6 @@ nucleus.application {
         providers.gradleProperty("nativeMarch").orNull?.let {
             march = NativeImageMarch.valueOf(it.uppercase())
         }
-        buildArgs.addAll(
-            "-H:+AddAllCharsets",
-            "-Djava.awt.headless=false",
-            "-Os",
-            "-H:-IncludeMethodData",
-        )
     }
 
     nativeDistributions {
@@ -77,9 +71,12 @@ nucleus.application {
 // Visual e2e needs the host-OS native WebView backend on the runtime classpath.
 // Natives are gitignored — build them before run if missing.
 tasks.matching { it.name == "run" || it.name == "jvmRun" }.configureEach {
-    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-        dependsOn(":webview-compose:buildNativeWindows")
-    } else if (Os.isFamily(Os.FAMILY_UNIX) && !Os.isFamily(Os.FAMILY_MAC)) {
-        dependsOn(":webview-compose:buildNativeLinux")
+    when {
+        Os.isFamily(Os.FAMILY_WINDOWS) ->
+            dependsOn(":webview-compose:buildNativeWindows")
+        Os.isFamily(Os.FAMILY_MAC) ->
+            dependsOn(":webview-compose:buildNativeMacos")
+        Os.isFamily(Os.FAMILY_UNIX) ->
+            dependsOn(":webview-compose:buildNativeLinux")
     }
 }

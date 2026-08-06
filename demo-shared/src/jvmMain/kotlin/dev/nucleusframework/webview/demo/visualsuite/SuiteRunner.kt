@@ -7,6 +7,7 @@ import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.webview.web.WebContent
 import dev.nucleusframework.webview.web.WebViewFileReadType
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView
 import dev.nucleusframework.webview.web.toAwtImage
 import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import kotlinx.coroutines.async
@@ -343,6 +344,11 @@ internal suspend fun runFullSuite(
         assertThat(native != null && native.isReady(), "native not ready")
         when (native) {
             is LinuxWebKitNativeWebView -> {
+                native.setZoomLevel(1.25)
+                delay(80)
+                native.setZoomLevel(1.0)
+            }
+            is MacOsWebKitNativeWebView -> {
                 native.setZoomLevel(1.25)
                 delay(80)
                 native.setZoomLevel(1.0)

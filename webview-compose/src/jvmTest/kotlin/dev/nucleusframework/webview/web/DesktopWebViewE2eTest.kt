@@ -9,6 +9,7 @@ import dev.nucleusframework.application.nucleusApplication
 import dev.nucleusframework.core.runtime.Platform
 import dev.nucleusframework.webview.web.e2e.E2eHost
 import dev.nucleusframework.webview.web.linux.WebKitLinuxBridge
+import dev.nucleusframework.webview.web.macos.WebKitMacOsBridge
 import dev.nucleusframework.webview.web.windows.WebView2WindowsBridge
 import dev.nucleusframework.window.TitleBar
 import java.util.concurrent.CopyOnWriteArrayList
@@ -21,6 +22,7 @@ import kotlin.test.Test
  * NativeView + Tao backend. No mocks.
  *
  *  - **Linux**: WebKit2GTK (`compose_webview_linux`)
+ *  - **macOS**: WKWebView (`compose_webview_macos`)
  *  - **Windows**: WebView2 (`compose_webview_windows`)
  *
  * Drivers live in [dev.nucleusframework.webview.web.e2e].
@@ -39,6 +41,12 @@ class DesktopWebViewE2eTest {
                     System.getenv("WAYLAND_DISPLAY").isNullOrBlank()
                 ) {
                     println("SKIPPED: no DISPLAY / WAYLAND_DISPLAY")
+                    return
+                }
+            }
+            Platform.MacOS -> {
+                if (!WebKitMacOsBridge.isLoaded) {
+                    println("SKIPPED: compose_webview_macos native library not loaded")
                     return
                 }
             }
