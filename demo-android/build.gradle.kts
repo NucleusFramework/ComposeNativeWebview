@@ -19,13 +19,13 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.kdroidfilter.webview.demo.android"
+    namespace = "dev.nucleusframework.webview.demo.android"
     compileSdk = 36
 
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
 
     defaultConfig {
-        applicationId = "io.github.kdroidfilter.webview.demo"
+        applicationId = "dev.nucleusframework.webview.demo"
         minSdk = 23
         targetSdk = 36
         versionCode = 1

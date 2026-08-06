@@ -22,7 +22,6 @@ kotlin {
     }
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
@@ -51,7 +50,6 @@ kotlin {
         }
 
         jvmMain.dependencies {
-            api(project(":wrywebview"))
             implementation(libs.kotlinx.coroutinesSwing)
         }
 
@@ -62,7 +60,7 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.kdroidfilter.webview"
+    namespace = "dev.nucleusframework.webview"
     compileSdk = 35
 
     defaultConfig {
@@ -105,7 +103,7 @@ fun org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget.setUpiOSObserver()
 }
 
 mavenPublishing {
-    configure(KotlinMultiplatform(androidVariantsToPublish = listOf("release"), sourcesJar = true))
+    configure(KotlinMultiplatform(sourcesJar = true))
     publishToMavenCentral()
     if (project.findProperty("signingInMemoryKey") != null) {
         signAllPublications()

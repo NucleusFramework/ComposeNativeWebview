@@ -1,50 +1,43 @@
-# ComposeNativeWebView 🌐
+# ComposeNativeWebView
 
 **ComposeNativeWebView** is a **Compose Multiplatform WebView** whose **API design and mobile implementations (Android & iOS) are intentionally derived almost verbatim from
 [KevinnZou/compose-webview-multiplatform](https://github.com/KevinnZou/compose-webview-multiplatform)**.
 
-This project exists **first and foremost to bring that same API to Desktop**, backed by **native OS webviews instead of a bundled Chromium runtime**.
+Package namespace:
 
 ```text
-io.github.kdroidfilter.webview.*
+dev.nucleusframework.webview.*
 ```
 
 ### What is reused vs what is new
 
-🟢 **Reused on purpose**
+**Reused on purpose**
 
 * API surface (`WebViewState`, `WebViewNavigator`, settings, callbacks, mental model)
 * Android implementation (`android.webkit.WebView`)
 * iOS implementation (`WKWebView`)
 * Overall behavior and semantics
 
-👉 If you already know **compose-webview-multiplatform**, you already know how to use this.
+If you already know **compose-webview-multiplatform**, you already know how to use this.
 
-🆕 **What ComposeNativeWebView adds**
+**What ComposeNativeWebView adds**
 
-* **Desktop support with native engines**
-* A **Rust + UniFFI (Wry)** backend instead of KCEF / embedded Chromium
-* A **tiny desktop footprint** with system-provided webviews
-* Handling of the **WasmJs** target via **IFrame** usage
+* Multiplatform packaging under NucleusFramework (`dev.nucleusframework`)
+* **WasmJs** target via **IFrame**
+* Desktop (JVM) API surface (currently a **no-op** backend; no native rendering yet)
 
 ---
 
 ## Platform backends
 
-✅ **Android**: `android.webkit.WebView`
-✅ **iOS**: `WKWebView`
-✅ **WasmJs**: `org.w3c.dom.HTMLIFrameElement`
-✅ **Desktop**: **Wry (Rust)** via **UniFFI**
-
-Desktop engines:
-
-* **Windows**: WebView2
-* **macOS**: WKWebView
-* **Linux**: WebKitGTK
+- **Android**: `android.webkit.WebView`
+- **iOS**: `WKWebView`
+- **WasmJs**: `org.w3c.dom.HTMLIFrameElement`
+- **Desktop**: no-op stub (all operations are empty; composable renders an empty box)
 
 ---
 
-## Quick start 🚀
+## Quick start
 
 ```kotlin
 @Composable
@@ -58,13 +51,13 @@ That’s it.
 
 ---
 
-## Installation 🧩
+## Installation
 
 ### Dependency (all platforms)
 
 ```kotlin
 dependencies {
-  implementation("io.github.kdroidfilter:composewebview:<version>")
+  implementation("dev.nucleusframework:composewebview:<version>")
 }
 ```
 
@@ -72,25 +65,11 @@ Same artifact for **Android, iOS, Desktop and WasmJs**.
 
 ---
 
-### Desktop only: enable native access ⚠️
-
-Wry uses native access via JNA.
-
-```kotlin
-compose.desktop {
-  application {
-    jvmArgs += "--enable-native-access=ALL-UNNAMED"
-  }
-}
-```
-
----
-
-## Demo app 🎮
+## Demo app
 
 Run the feature showcase first:
 
-* **Desktop**: `./gradlew :demo:run`
+* **Desktop**: `./gradlew :demo:run` (WebView area is empty until a desktop backend lands)
 * **Android**: `./gradlew :demo-android:installDebug`
 * **WasmJs**: `./gradlew :demo-wasmJs:wasmJsBrowserDevelopmentRun`
 * **iOS**: open `iosApp/iosApp.xcodeproj` in Xcode and Run
@@ -102,7 +81,7 @@ Responsive UI:
 
 ---
 
-## Core features ✨
+## Core features
 
 ### Content loading
 
@@ -110,15 +89,11 @@ Responsive UI:
 * `loadHtml(html)`
 * `loadHtmlFile(fileName, readType)`
 
----
-
 ### Navigation
 
 * `navigateBack()`, `navigateForward()`
 * `reload()`, `stopLoading()`
 * `canGoBack`, `canGoForward`
-
----
 
 ### Observable state
 
@@ -127,9 +102,7 @@ Responsive UI:
 * `lastLoadedUrl`
 * `pageTitle`
 
----
-
-### Cookies 🍪
+### Cookies
 
 Unified cookie API:
 
@@ -140,29 +113,23 @@ state.cookieManager.removeCookies(url)
 state.cookieManager.removeAllCookies()
 ```
 
----
-
 ### JavaScript
 
 ```kotlin
 navigator.evaluateJavaScript("document.title = 'Hello'")
 ```
 
----
-
-### JS ↔ Kotlin bridge 🌉
+### JS ↔ Kotlin bridge
 
 * injected automatically after page load
 * callback-based
-* works on all platforms
+* works on Android / iOS / WasmJs (desktop no-op)
 
 ```js
 window.kmpJsBridge.callNative("echo", {...}, callback)
 ```
 
----
-
-### RequestInterceptor 🚦
+### RequestInterceptor
 
 Intercept **navigator-initiated** navigations only:
 
@@ -181,7 +148,7 @@ Useful for:
 
 ---
 
-## WebViewState & Navigator 📘
+## WebViewState & Navigator
 
 ### State creation
 
@@ -199,8 +166,6 @@ Supports:
 * inline HTML
 * resource files
 
----
-
 ### Navigator
 
 ```kotlin
@@ -217,23 +182,13 @@ Commands:
 
 ---
 
-## Settings ⚙️
+## Settings
 
 ### Custom User-Agent
 
 ```kotlin
 state.webSettings.customUserAgentString = "MyApp/1.2.3"
 ```
-
-Desktop note:
-
-* applied at creation time
-* changing it **recreates** the WebView (debounced)
-* JS context/history may be lost
-
-👉 Set it early.
-
----
 
 ### Logging
 
@@ -243,54 +198,27 @@ state.webSettings.logSeverity = KLogSeverity.Debug
 
 ---
 
-## Desktop advanced 🖥️
+## Project structure
 
-### Access native WebView handle
-
-```kotlin
-WebView(
-  state,
-  navigator,
-  onCreated = { native ->
-    println(native.getCurrentUrl())
-  }
-)
-```
-
-Useful for debugging or platform-specific hooks.
-
----
-
-## Project structure 🗂️
-
-* `wrywebview/` → Rust core + UniFFI bindings
-* `wrywebview-compose/` → Compose API
+* `webview-compose/` → Compose Multiplatform API + platform actuals
+* `webview-compose-test/` → Playwright-based test helpers (JVM)
 * `demo-shared/` → shared demo UI
 * `demo/`, `demo-android/`, `demo-wasmJs/`, `iosApp/` → platform launchers
 
 ---
 
-## Limitations ⚠️
+## Limitations
 
 * RequestInterceptor does **not** intercept sub-resources
-
-### Desktop
-
-* Desktop UA change recreates the WebView
-
-### WasmJs
-
-* Navigation back and forward is not available in the IFrame.
-* The IFrame will work only if the target website has appropriately configured its CORS.
-* JS can be executed only on the same origin.
-* Cookies can be set only for the parent destination (when the destination of the iframe is the same as the parent destination - cookies can be set. Otherwise, they will be ignored (there is a hack for it, but it is not a clean solution then https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie#security)
+* **Desktop** is a no-op: no rendering, navigation, cookies, or JS execution
+* **WasmJs**:
+  * Navigation back and forward is not available in the IFrame
+  * The IFrame will work only if the target website has appropriately configured its CORS
+  * JS can be executed only on the same origin
+  * Cookies can be set only for the parent destination (when the destination of the iframe is the same as the parent destination)
 
 ---
 
-
-## Credits 🙏
+## Credits
 
 * API inspiration: KevinnZou/compose-webview-multiplatform
-* Wry (Tauri ecosystem)
-* UniFFI (Mozilla)
-

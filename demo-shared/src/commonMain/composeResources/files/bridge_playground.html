@@ -157,8 +157,8 @@
 <header>
   <h1>Bridge Playground (JS ↔ Kotlin)</h1>
   <p>
-    This page calls <code>window.kmpJsBridge.callNative(...)</code>. The Desktop/Wry backend routes messages via
-    <code>window.ipc.postMessage</code>.
+    This page calls <code>window.kmpJsBridge.callNative(...)</code>. Platform backends route messages via
+    their native bridge channel (e.g. <code>window.ipc.postMessage</code> when available).
   </p>
   <div id="status" class="pill"><b>Status:</b> <span>waiting for bridge…</span></div>
 </header>

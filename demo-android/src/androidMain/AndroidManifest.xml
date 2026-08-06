@@ -5,7 +5,7 @@
         android:label="ComposeWebView"
         android:theme="@style/Theme.ComposeWebViewDemo">
         <activity
-            android:name="io.github.kdroidfilter.webview.demo.MainActivity"
+            android:name="dev.nucleusframework.webview.demo.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

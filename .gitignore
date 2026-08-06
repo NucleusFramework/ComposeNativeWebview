@@ -18,10 +18,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# Rust
-**/target/
-**/*.rs.bk
-
 # Node
 node_modules/
 
@@ -34,7 +30,3 @@ xcuserdata
 !*.xcodeproj/project.xcworkspace/
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
-
-# Compose/Skiko native libs
-libskiko-*.dylib
-libskiko-*.dylib.sha256

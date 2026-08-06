@@ -29,12 +29,11 @@ kotlin {
 
 compose.desktop {
     application {
-        mainClass = "io.github.kdroidfilter.webview.demo.MainKt"
-        jvmArgs += "--enable-native-access=ALL-UNNAMED"
+        mainClass = "dev.nucleusframework.webview.demo.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "io.github.kdroidfilter.webview.demo"
+            packageName = "dev.nucleusframework.webview.demo"
             packageVersion = "1.0.0"
         }
     }

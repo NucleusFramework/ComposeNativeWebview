@@ -24,7 +24,6 @@ kotlin {
     ) == true
     if (isMacHost) {
         listOf(
-            iosX64(),
             iosArm64(),
             iosSimulatorArm64(),
         ).forEach { iosTarget ->
@@ -65,7 +64,7 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.kdroidfilter.webview.demo.shared"
+    namespace = "dev.nucleusframework.webview.demo.shared"
     compileSdk = 35
 
     defaultConfig {
