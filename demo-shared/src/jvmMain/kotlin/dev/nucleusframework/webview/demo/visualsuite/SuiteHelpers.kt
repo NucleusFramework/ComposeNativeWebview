@@ -72,10 +72,23 @@ internal suspend fun waitWebView(
     state: WebViewState,
     timeoutMs: Long = 20_000,
 ) {
-    withTimeout(timeoutMs) {
-        // Windows recreates the native view once LocalTaoWindow HWND is ready —
-        // wait for a live backend, not just a non-null DesktopWebView shell.
-        while (!state.webView?.nativeWebView.isLiveDesktopBackend()) delay(40)
+    try {
+        withTimeout(timeoutMs) {
+            // Windows recreates the native view once LocalTaoWindow HWND is ready —
+            // wait for a live backend, not just a non-null DesktopWebView shell.
+            while (!state.webView?.nativeWebView.isLiveDesktopBackend()) delay(40)
+        }
+    } catch (t: kotlinx.coroutines.TimeoutCancellationException) {
+        val nv = state.webView?.nativeWebView
+        error(
+            "Desktop WebView native backend not ready after ${timeoutMs}ms " +
+                "(webView=${state.webView != null}, native=${nv?.let { it::class.simpleName }}, " +
+                "ready=${nv?.isReady()}). " +
+                "On Windows build natives first: " +
+                "`./gradlew :webview-compose:buildNativeWindows` " +
+                "or `webview-compose\\src\\jvmMain\\native\\windows\\build.bat` " +
+                "(requires MSVC + JAVA_HOME + WebView2 Runtime).",
+        )
     }
 }
 

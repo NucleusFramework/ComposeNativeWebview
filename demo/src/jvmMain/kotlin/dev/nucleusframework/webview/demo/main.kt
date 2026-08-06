@@ -13,10 +13,14 @@ import kotlin.system.exitProcess
 /**
  * Full visual e2e suite entrypoint.
  *
- * Runs a real Tao window + WebKit WebView and exercises the full desktop API.
- * Writes `/tmp/composewebview-visual-suite-report.txt` and exits 0/1.
+ * Runs a real Tao window + desktop WebView (WebKit2GTK / WebView2) and
+ * exercises the full desktop API. Writes a report under java.io.tmpdir
+ * (or `$COMPOSEWEBVIEW_SUITE_REPORT`) and exits 0/1.
  *
  *   ./gradlew :demo:run
+ *
+ * Exit code 1 means the suite reported failures (scroll up for the report),
+ * or the native backend failed to load.
  */
 fun main() {
     var exitCode = 1
@@ -33,6 +37,13 @@ fun main() {
             TitleBar { }
             VisualSuiteApp { passed, reportPath ->
                 println("SUITE_FINISHED passed=$passed report=$reportPath")
+                if (!passed) {
+                    System.err.println(
+                        "Visual e2e FAILED — open report: $reportPath\n" +
+                            "If every case failed early, build natives: " +
+                            "./gradlew :webview-compose:buildNativeWindows  (or buildNativeLinux)",
+                    )
+                }
                 exitCode = if (passed) 0 else 1
                 exitApplication()
                 // Ensure process exit for CI / agent validation

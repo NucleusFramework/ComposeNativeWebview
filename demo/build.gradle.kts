@@ -1,5 +1,6 @@
 import dev.nucleusframework.desktop.application.dsl.NativeImageMarch
 import dev.nucleusframework.desktop.application.dsl.TargetFormat
+import org.apache.tools.ant.taskdefs.condition.Os
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -70,5 +71,15 @@ nucleus.application {
         macOS {
             bundleID = "dev.nucleusframework.webview.demo"
         }
+    }
+}
+
+// Visual e2e needs the host-OS native WebView backend on the runtime classpath.
+// Natives are gitignored — build them before run if missing.
+tasks.matching { it.name == "run" || it.name == "jvmRun" }.configureEach {
+    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+        dependsOn(":webview-compose:buildNativeWindows")
+    } else if (Os.isFamily(Os.FAMILY_UNIX) && !Os.isFamily(Os.FAMILY_MAC)) {
+        dependsOn(":webview-compose:buildNativeLinux")
     }
 }

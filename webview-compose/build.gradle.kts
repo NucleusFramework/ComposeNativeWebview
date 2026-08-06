@@ -55,17 +55,32 @@ val buildNativeWindows by tasks.registering(Exec::class) {
     val archDir =
         if (arch.contains("aarch64") || arch.contains("arm64")) "win32-aarch64" else "win32-x64"
     val checkFile = nativeResourceDir.file("$archDir/compose_webview_windows.dll").asFile
+    val loaderFile = nativeResourceDir.file("$archDir/WebView2Loader.dll").asFile
     onlyIf {
-        Os.isFamily(Os.FAMILY_WINDOWS) && !checkFile.exists()
+        Os.isFamily(Os.FAMILY_WINDOWS) && (!checkFile.exists() || !loaderFile.exists())
     }
     inputs.dir(nativeWindowsDir)
-    outputs.file(checkFile)
+    outputs.files(checkFile, loaderFile)
     workingDir(nativeWindowsDir.asFile)
     commandLine("cmd", "/c", "build.bat")
+    doLast {
+        check(checkFile.exists()) {
+            "buildNativeWindows finished but ${checkFile.name} is missing. " +
+                "Need MSVC (vcvarsall) + JAVA_HOME. Run: " +
+                "webview-compose\\src\\jvmMain\\native\\windows\\build.bat"
+        }
+        check(loaderFile.exists()) {
+            "buildNativeWindows finished but WebView2Loader.dll is missing next to ${checkFile.name}"
+        }
+    }
 }
 
-// Ensure JVM resources include the native lib when packaging on host OS.
-tasks.matching { it.name == "jvmProcessResources" || it.name == "processJvmMainResources" }.configureEach {
+// Ensure JVM resources / jar include the native lib when packaging on host OS.
+tasks.matching {
+    it.name == "jvmProcessResources" ||
+        it.name == "processJvmMainResources" ||
+        it.name == "jvmJar"
+}.configureEach {
     dependsOn(buildNativeLinux, buildNativeWindows)
 }
 
