@@ -32,6 +32,8 @@ jobs:
           EXPECTED=(
             "webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
             "webview-compose/src/jvmMain/resources/nucleus/native/linux-aarch64/libcompose_webview_linux.so"
+            "webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/compose_webview_windows.dll"
+            "webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/WebView2Loader.dll"
           )
           MISSING=0
           for f in "${EXPECTED[@]}"; do

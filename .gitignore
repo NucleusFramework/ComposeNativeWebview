@@ -22,6 +22,13 @@ captures/
 # Same layout as Nucleus: resources/nucleus/native/{linux,darwin,win32}-*
 **/src/**/resources/nucleus/native/
 
+# Windows WebView2 SDK bootstrap (nuget + packages/) — not vendored.
+**/src/**/native/windows/nuget.exe
+**/src/**/native/windows/packages/
+**/src/**/native/windows/*.obj
+**/src/**/native/windows/*.lib
+**/src/**/native/windows/*.exp
+
 # Node
 node_modules/
 

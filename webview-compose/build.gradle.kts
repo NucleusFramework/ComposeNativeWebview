@@ -20,13 +20,14 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = 1
 }
 
-// ── Native build (Linux WebKit2GTK) ─────────────────────────────────────────
-// Same pattern as Nucleus: compile host-arch .so into
-// src/jvmMain/resources/nucleus/native/linux-{x64,aarch64}/.
-// CI builds both arches via matrix and downloads artifacts before package/publish.
-// Locally, only the host arch is built (and only if the .so is missing).
+// ── Native build (Linux WebKit2GTK / Windows WebView2) ──────────────────────
+// Same pattern as Nucleus: compile host-arch natives into
+// src/jvmMain/resources/nucleus/native/{linux,win32}-{x64,aarch64}/.
+// CI builds via matrix and downloads artifacts before package/publish.
+// Locally, only the host arch is built (and only if the artifact is missing).
 
 val nativeLinuxDir = layout.projectDirectory.dir("src/jvmMain/native/linux")
+val nativeWindowsDir = layout.projectDirectory.dir("src/jvmMain/native/windows")
 val nativeResourceDir = layout.projectDirectory.dir("src/jvmMain/resources/nucleus/native")
 
 val buildNativeLinux by tasks.registering(Exec::class) {
@@ -47,14 +48,30 @@ val buildNativeLinux by tasks.registering(Exec::class) {
     commandLine("bash", "build.sh")
 }
 
-// Ensure JVM resources include the native lib when packaging on Linux hosts.
+val buildNativeWindows by tasks.registering(Exec::class) {
+    description = "Compiles the WebView2 JNI backend into compose_webview_windows.dll"
+    group = "build"
+    val arch = System.getProperty("os.arch").lowercase()
+    val archDir =
+        if (arch.contains("aarch64") || arch.contains("arm64")) "win32-aarch64" else "win32-x64"
+    val checkFile = nativeResourceDir.file("$archDir/compose_webview_windows.dll").asFile
+    onlyIf {
+        Os.isFamily(Os.FAMILY_WINDOWS) && !checkFile.exists()
+    }
+    inputs.dir(nativeWindowsDir)
+    outputs.file(checkFile)
+    workingDir(nativeWindowsDir.asFile)
+    commandLine("cmd", "/c", "build.bat")
+}
+
+// Ensure JVM resources include the native lib when packaging on host OS.
 tasks.matching { it.name == "jvmProcessResources" || it.name == "processJvmMainResources" }.configureEach {
-    dependsOn(buildNativeLinux)
+    dependsOn(buildNativeLinux, buildNativeWindows)
 }
 
 tasks.configureEach {
     if (name == "sourcesJar" || name == "jvmSourcesJar") {
-        dependsOn(buildNativeLinux)
+        dependsOn(buildNativeLinux, buildNativeWindows)
     }
 }
 

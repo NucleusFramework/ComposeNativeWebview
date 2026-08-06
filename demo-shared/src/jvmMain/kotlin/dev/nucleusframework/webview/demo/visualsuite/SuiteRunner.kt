@@ -3,10 +3,12 @@ package dev.nucleusframework.webview.demo.visualsuite
 import composewebview.demo_shared.generated.resources.Res
 import dev.nucleusframework.webview.cookie.Cookie
 import dev.nucleusframework.webview.web.LoadingState
+import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.webview.web.WebContent
 import dev.nucleusframework.webview.web.WebViewFileReadType
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
 import dev.nucleusframework.webview.web.toAwtImage
+import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -337,11 +339,21 @@ internal suspend fun runFullSuite(
         }
     }
     case("S03") {
-        val native = ctx.state.webView?.nativeWebView as? LinuxWebKitNativeWebView
-        assertThat(native != null, "not linux webview")
-        native!!.setZoomLevel(1.25)
-        delay(80)
-        native.setZoomLevel(1.0)
+        val native = ctx.state.webView?.nativeWebView
+        assertThat(native != null && native.isReady(), "native not ready")
+        when (native) {
+            is LinuxWebKitNativeWebView -> {
+                native.setZoomLevel(1.25)
+                delay(80)
+                native.setZoomLevel(1.0)
+            }
+            is WindowsWebView2NativeWebView -> {
+                native.setZoomLevel(1.25)
+                delay(80)
+                native.setZoomLevel(1.0)
+            }
+            else -> error("unsupported desktop native: ${native!!::class.simpleName}")
+        }
     }
     case("S04") {
         loadHtmlAwaitMarker(ctx.navigator, "white-bg", pageSolidColor("#ffffff").let {
@@ -406,8 +418,8 @@ internal suspend fun runFullSuite(
         assertThat(ctx.getOnCreatedFired(), "onCreated never fired")
     }
     case("L02") {
-        val native = ctx.state.webView?.nativeWebView as? LinuxWebKitNativeWebView
-        assertThat(native != null && native.isReady(), "not ready")
+        val native = ctx.state.webView?.nativeWebView
+        assertThat(native.isLiveDesktopBackend(), "not ready: ${native?.let { it::class.simpleName }}")
     }
     case("L03") {
         ctx.state.webView?.nativeWebView?.focus()

@@ -1,8 +1,11 @@
 package dev.nucleusframework.webview.demo.visualsuite
 
 import dev.nucleusframework.webview.web.LoadingState
+import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.webview.web.WebViewNavigator
 import dev.nucleusframework.webview.web.WebViewState
+import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
@@ -60,12 +63,19 @@ internal suspend fun evalJsUnquoted(
     timeoutMs: Long = 12_000,
 ): String = unquoteJs(evalJs(navigator, script, timeoutMs))
 
+internal fun NativeWebView?.isLiveDesktopBackend(): Boolean =
+    this != null &&
+        isReady() &&
+        (this is LinuxWebKitNativeWebView || this is WindowsWebView2NativeWebView)
+
 internal suspend fun waitWebView(
     state: WebViewState,
-    timeoutMs: Long = 15_000,
+    timeoutMs: Long = 20_000,
 ) {
     withTimeout(timeoutMs) {
-        while (state.webView == null) delay(40)
+        // Windows recreates the native view once LocalTaoWindow HWND is ready —
+        // wait for a live backend, not just a non-null DesktopWebView shell.
+        while (!state.webView?.nativeWebView.isLiveDesktopBackend()) delay(40)
     }
 }
 

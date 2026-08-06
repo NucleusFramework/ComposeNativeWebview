@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import dev.nucleusframework.webview.web.WebViewNavigator
 import dev.nucleusframework.webview.web.WebViewState
-import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -26,9 +25,13 @@ internal fun LoadHtmlDriver(
             assertEquals("hello-e2e", marker.trim('"'))
             val url = state.lastLoadedUrl
             assertNotNull(url, "lastLoadedUrl should be set")
+            // Linux may keep baseUri (e2e.local); WebView2 uses about:blank / data: for NavigateToString.
             assertTrue(
-                url.contains("e2e.local") || url.startsWith("data:") || url == "about:blank" ||
-                    state.webView?.nativeWebView is LinuxWebKitNativeWebView,
+                url.contains("e2e.local") ||
+                    url.startsWith("data:") ||
+                    url == "about:blank" ||
+                    url.startsWith("about:") ||
+                    isLiveDesktopWebView(state),
                 "unexpected url=$url",
             )
             println("[e2e] loadHtml + title + marker OK")

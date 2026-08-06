@@ -31,4 +31,4 @@ fun App() {
 - **Android**: `android.webkit.WebView`
 - **iOS**: `WKWebView`
 - **WasmJs**: `HTMLIFrameElement`
-- **Desktop (JVM)**: currently a no-op stub (API available, no rendering)
+- **Desktop (JVM)**: Nucleus Tao `NativeView` — WebKit2GTK (Linux), WebView2 (Windows); macOS no-op for now

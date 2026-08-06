@@ -24,7 +24,7 @@ If you already know **compose-webview-multiplatform**, you already know how to u
 
 * Multiplatform packaging under NucleusFramework (`dev.nucleusframework`)
 * **WasmJs** target via **IFrame**
-* Desktop (JVM) via **Nucleus Tao + NativeView** (Linux WebKit2GTK; Windows/macOS no-op for now)
+* Desktop (JVM) via **Nucleus Tao + NativeView** (Linux WebKit2GTK; Windows WebView2; macOS no-op for now)
 
 ---
 
@@ -33,7 +33,10 @@ If you already know **compose-webview-multiplatform**, you already know how to u
 - **Android**: `android.webkit.WebView`
 - **iOS**: `WKWebView`
 - **WasmJs**: `org.w3c.dom.HTMLIFrameElement`
-- **Desktop**: Nucleus Tao `NativeView` + WebKit2GTK on Linux (requires `nucleusApplication` / Tao backend). Windows/macOS stay no-op until their backends land.
+- **Desktop**: Nucleus Tao `NativeView` (requires `nucleusApplication` / Tao backend).
+  - **Linux**: WebKit2GTK (`libcompose_webview_linux.so`)
+  - **Windows**: WebView2 CompositionController + DirectComposition (`compose_webview_windows.dll`; needs WebView2 Runtime / Edge)
+  - **macOS**: no-op until the WKWebView backend lands
 
 ---
 
@@ -210,7 +213,7 @@ state.webSettings.logSeverity = KLogSeverity.Debug
 ## Limitations
 
 * RequestInterceptor does **not** intercept sub-resources
-* **Desktop**: requires Nucleus Tao (`nucleusApplication` + `decorated-window-tao`). Linux is fully wired (WebKit2GTK); Windows/macOS are still no-op.
+* **Desktop**: requires Nucleus Tao (`nucleusApplication` + `decorated-window-tao`). Linux (WebKit2GTK) and Windows (WebView2) are fully wired; macOS is still no-op.
 * **WasmJs**:
   * Navigation back and forward is not available in the IFrame
   * The IFrame will work only if the target website has appropriately configured its CORS

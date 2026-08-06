@@ -1,4 +1,4 @@
-package dev.nucleusframework.webview.web.linux
+package dev.nucleusframework.webview.web.windows
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -7,12 +7,20 @@ import dev.nucleusframework.window.tao.NucleusPlatformView
 import kotlinx.coroutines.CompletableDeferred
 
 /**
- * Linux [NativeWebView] backed by a real WebKit2GTK widget, embeddable
- * via [NucleusPlatformView.GtkWidget] / Nucleus [dev.nucleusframework.window.tao.NativeView].
+ * Windows [NativeWebView] backed by WebView2
+ * (`CoreWebView2CompositionController` + DirectComposition).
  *
- * Requires the Tao window backend.
+ * Embed via [NucleusPlatformView.HWnd] / Nucleus [dev.nucleusframework.window.tao.NativeView].
+ * The platform handle is **not** a real child HWND — WebView2 paints through
+ * a DComp tree owned by the native side; [NucleusPlatformView.HWnd.hwndHandle]
+ * is always `0L` and positioning goes through [setBounds] / [setCornerRadius]
+ * (same pattern as Nucleus `tao-demo` WebView tab).
+ *
+ * Requires the Tao window backend and WebView2 Runtime (bundled with Edge
+ * on modern Windows).
  */
-class LinuxWebKitNativeWebView(
+class WindowsWebView2NativeWebView(
+    parentHwnd: Long,
     customUserAgent: String? = null,
     dataDirectory: String? = null,
     initScript: String? = null,
@@ -24,14 +32,13 @@ class LinuxWebKitNativeWebView(
     backgroundColor: Color = Color.White,
 ) : NativeWebView() {
     private val handle: Long
-    private val gtkWidgetHandle: Long
     private var released = false
 
     init {
-        require(WebKitLinuxBridge.isLoaded) {
-            "compose_webview_linux native library is not available"
+        require(WebView2WindowsBridge.isLoaded) {
+            "compose_webview_windows native library is not available"
         }
-        // Non-transparent: always fully opaque so pages look like a normal browser.
+        require(parentHwnd != 0L) { "parent HWND is required on Windows" }
         val effective =
             if (transparent) {
                 backgroundColor
@@ -45,7 +52,8 @@ class LinuxWebKitNativeWebView(
         val r = ((argb ushr 16) and 0xFF) / 255f
         val g = ((argb ushr 8) and 0xFF) / 255f
         val b = (argb and 0xFF) / 255f
-        handle = WebKitLinuxBridge.nativeCreate(
+        handle = WebView2WindowsBridge.nativeCreate(
+            parentHwnd = parentHwnd,
             userAgent = customUserAgent?.trim()?.takeIf { it.isNotEmpty() },
             dataDirectory = dataDirectory?.trim()?.takeIf { it.isNotEmpty() },
             initScript = initScript?.trim()?.takeIf { it.isNotEmpty() },
@@ -59,16 +67,31 @@ class LinuxWebKitNativeWebView(
             bgB = b,
             bgA = a,
         )
-        require(handle != 0L) { "Failed to create WebKitWebView" }
-        gtkWidgetHandle = WebKitLinuxBridge.nativeGetGtkWidget(handle)
-        require(gtkWidgetHandle != 0L) { "Failed to get GtkWidget handle" }
+        require(handle != 0L) {
+            "Failed to create WebView2 (is WebView2 Runtime installed?)"
+        }
     }
 
-    /** Creates the [NucleusPlatformView] used by NativeView embedding. */
-    fun asPlatformView(): NucleusPlatformView.GtkWidget =
-        object : NucleusPlatformView.GtkWidget {
-            override val gtkWidgetHandle: Long
-                get() = this@LinuxWebKitNativeWebView.gtkWidgetHandle
+    /**
+     * Creates the [NucleusPlatformView] used by NativeView embedding.
+     *
+     * [NucleusPlatformView.HWnd.hwndHandle] is intentionally `0L` so Tao's
+     * SetParent/SetWindowPos path no-ops; layout is driven entirely via
+     * [setBounds] / [setCornerRadius] on the DComp tree.
+     */
+    fun asPlatformView(): NucleusPlatformView.HWnd =
+        object : NucleusPlatformView.HWnd {
+            override val hwndHandle: Long = 0L
+
+            override fun setBounds(xPx: Int, yPx: Int, widthPx: Int, heightPx: Int) {
+                if (released) return
+                WebView2WindowsBridge.nativeSetBounds(handle, xPx, yPx, widthPx, heightPx)
+            }
+
+            override fun setCornerRadius(radiusPx: Float) {
+                if (released) return
+                WebView2WindowsBridge.nativeSetCornerRadius(handle, radiusPx)
+            }
 
             override fun dispose() {
                 // Lifecycle owned by NativeWebView.destroy(); NativeView
@@ -79,59 +102,59 @@ class LinuxWebKitNativeWebView(
     override fun isReady(): Boolean = !released && handle != 0L
 
     override fun isLoading(): Boolean =
-        if (!isReady()) false else WebKitLinuxBridge.nativeIsLoading(handle)
+        if (!isReady()) false else WebView2WindowsBridge.nativeIsLoading(handle)
 
     override fun getCurrentUrl(): String? =
-        if (!isReady()) null else WebKitLinuxBridge.nativeCurrentUrl(handle)
+        if (!isReady()) null else WebView2WindowsBridge.nativeCurrentUrl(handle)
 
     override fun getTitle(): String? =
-        if (!isReady()) null else WebKitLinuxBridge.nativeGetTitle(handle)
+        if (!isReady()) null else WebView2WindowsBridge.nativeGetTitle(handle)
 
     override fun canGoBack(): Boolean =
-        if (!isReady()) false else WebKitLinuxBridge.nativeCanGoBack(handle)
+        if (!isReady()) false else WebView2WindowsBridge.nativeCanGoBack(handle)
 
     override fun canGoForward(): Boolean =
-        if (!isReady()) false else WebKitLinuxBridge.nativeCanGoForward(handle)
+        if (!isReady()) false else WebView2WindowsBridge.nativeCanGoForward(handle)
 
     override fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
         if (!isReady()) return
         if (additionalHttpHeaders.isEmpty()) {
-            WebKitLinuxBridge.nativeLoadUrl(handle, url)
+            WebView2WindowsBridge.nativeLoadUrl(handle, url)
         } else {
             val names = additionalHttpHeaders.keys.toTypedArray()
             val values = additionalHttpHeaders.values.toTypedArray()
-            WebKitLinuxBridge.nativeLoadUrlWithHeaders(handle, url, names, values)
+            WebView2WindowsBridge.nativeLoadUrlWithHeaders(handle, url, names, values)
         }
     }
 
     override fun loadHtml(html: String) {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeLoadHtml(handle, html, null)
+        WebView2WindowsBridge.nativeLoadHtml(handle, html, null)
     }
 
     fun loadHtml(html: String, baseUri: String?) {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeLoadHtml(handle, html, baseUri)
+        WebView2WindowsBridge.nativeLoadHtml(handle, html, baseUri)
     }
 
     override fun goBack() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeGoBack(handle)
+        WebView2WindowsBridge.nativeGoBack(handle)
     }
 
     override fun goForward() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeGoForward(handle)
+        WebView2WindowsBridge.nativeGoForward(handle)
     }
 
     override fun reload() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeReload(handle)
+        WebView2WindowsBridge.nativeReload(handle)
     }
 
     override fun stopLoading() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeStopLoading(handle)
+        WebView2WindowsBridge.nativeStopLoading(handle)
     }
 
     override fun evaluateJavaScript(script: String, callback: (String) -> Unit) {
@@ -139,41 +162,38 @@ class LinuxWebKitNativeWebView(
             callback("")
             return
         }
-        WebKitLinuxBridge.registerJsCallback(handle, callback)
-        WebKitLinuxBridge.nativeEvaluateJavaScript(handle, script)
+        WebView2WindowsBridge.registerJsCallback(handle, callback)
+        WebView2WindowsBridge.nativeEvaluateJavaScript(handle, script)
     }
 
     override fun drainIpcMessages(): List<String> =
-        if (!isReady()) emptyList() else WebKitLinuxBridge.drainIpcMessages(handle)
+        if (!isReady()) emptyList() else WebView2WindowsBridge.drainIpcMessages(handle)
 
     override fun addNavigateListener(listener: (String) -> Boolean) {
         if (!isReady()) return
-        WebKitLinuxBridge.addNavigateListener(handle, listener)
+        WebView2WindowsBridge.addNavigateListener(handle, listener)
     }
 
     override fun removeNavigateListener(listener: (String) -> Boolean) {
         if (!isReady()) return
-        WebKitLinuxBridge.removeNavigateListener(handle, listener)
+        WebView2WindowsBridge.removeNavigateListener(handle, listener)
     }
 
-    override fun captureScreenshotNative(): ByteArray? {
-        // Synchronous API is not available; callers should use the suspend path.
-        return null
-    }
+    override fun captureScreenshotNative(): ByteArray? = null
 
     suspend fun captureScreenshotAsync(): ByteArray? {
         if (!isReady()) return null
         val deferred = CompletableDeferred<ByteArray?>()
-        WebKitLinuxBridge.registerScreenshotDeferred(handle, deferred)
-        WebKitLinuxBridge.nativeCaptureScreenshot(handle)
+        WebView2WindowsBridge.registerScreenshotDeferred(handle, deferred)
+        WebView2WindowsBridge.nativeCaptureScreenshot(handle)
         return deferred.await()
     }
 
     suspend fun getCookiesJson(url: String): String {
         if (!isReady()) return "[]"
         val deferred = CompletableDeferred<String>()
-        WebKitLinuxBridge.registerCookieDeferred(handle, deferred)
-        WebKitLinuxBridge.nativeGetCookies(handle, url)
+        WebView2WindowsBridge.registerCookieDeferred(handle, deferred)
+        WebView2WindowsBridge.nativeGetCookies(handle, url)
         return deferred.await()
     }
 
@@ -188,45 +208,45 @@ class LinuxWebKitNativeWebView(
         sameSite: String?,
     ) {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeSetCookie(
+        WebView2WindowsBridge.nativeSetCookie(
             handle, name, value, domain, path, secure, httpOnly, expiresMs, sameSite,
         )
     }
 
     fun removeAllCookiesNative() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeRemoveAllCookies(handle)
+        WebView2WindowsBridge.nativeRemoveAllCookies(handle)
     }
 
     fun removeCookiesForUrlNative(url: String) {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeRemoveCookiesForUrl(handle, url)
+        WebView2WindowsBridge.nativeRemoveCookiesForUrl(handle, url)
     }
 
     fun setZoomLevel(zoom: Double) {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeSetZoomLevel(handle, zoom)
+        WebView2WindowsBridge.nativeSetZoomLevel(handle, zoom)
     }
 
     override fun openDevTools() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeOpenDevTools(handle)
+        WebView2WindowsBridge.nativeOpenDevTools(handle)
     }
 
     override fun closeDevTools() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeCloseDevTools(handle)
+        WebView2WindowsBridge.nativeCloseDevTools(handle)
     }
 
     override fun focus() {
         if (!isReady()) return
-        WebKitLinuxBridge.nativeFocus(handle)
+        WebView2WindowsBridge.nativeFocus(handle)
     }
 
     override fun destroy() {
         if (released) return
         released = true
-        WebKitLinuxBridge.clearHandle(handle)
-        WebKitLinuxBridge.nativeRelease(handle)
+        WebView2WindowsBridge.clearHandle(handle)
+        WebView2WindowsBridge.nativeRelease(handle)
     }
 }

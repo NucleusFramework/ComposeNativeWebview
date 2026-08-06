@@ -3,14 +3,16 @@ package dev.nucleusframework.webview.web
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
 import dev.nucleusframework.webview.util.KLogger
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import java.net.URL
 import kotlinx.coroutines.CoroutineScope
 
 /**
  * Desktop [IWebView] implementation.
  *
- * On Linux (WebKit2GTK via Tao/NativeView) all operations hit the real
- * native backend. On other desktop OSes this remains a no-op shell.
+ * On Linux (WebKit2GTK) and Windows (WebView2) via Tao/NativeView all
+ * operations hit the real native backend. On other desktop OSes this
+ * remains a no-op shell.
  */
 internal class DesktopWebView(
     override val nativeWebView: NativeWebView,
@@ -40,11 +42,10 @@ internal class DesktopWebView(
         historyUrl: String?,
     ) {
         if (html == null) return
-        val linux = nativeWebView as? LinuxWebKitNativeWebView
-        if (linux != null) {
-            linux.loadHtml(html, baseUrl)
-        } else {
-            nativeWebView.loadHtml(html)
+        when (val native = nativeWebView) {
+            is LinuxWebKitNativeWebView -> native.loadHtml(html, baseUrl)
+            is WindowsWebView2NativeWebView -> native.loadHtml(html, baseUrl)
+            else -> nativeWebView.loadHtml(html)
         }
     }
 
@@ -119,13 +120,11 @@ internal class DesktopWebView(
     }
 
     override suspend fun captureScreenshotOrNull(): ByteArray? {
-        val linux = nativeWebView as? LinuxWebKitNativeWebView
-        if (linux != null) {
-            return linux.captureScreenshotAsync()
+        when (val native = nativeWebView) {
+            is LinuxWebKitNativeWebView -> return native.captureScreenshotAsync()
+            is WindowsWebView2NativeWebView -> return native.captureScreenshotAsync()
         }
-        val nativeBytes = nativeWebView.captureScreenshotNative()
-        if (nativeBytes != null) return nativeBytes
-        return null
+        return nativeWebView.captureScreenshotNative()
     }
 
     override fun injectJsBridge() {
@@ -144,6 +143,8 @@ internal class DesktopWebView(
     }
 
     override fun initJsBridge(webViewJsBridge: WebViewJsBridge) {
-        // IPC is wired natively via WebKit user-content script message handler "ipc".
+        // IPC is wired natively:
+        //  - Linux: WebKit user-content script message handler "ipc"
+        //  - Windows: window.ipc -> chrome.webview.postMessage
     }
 }

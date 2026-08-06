@@ -57,7 +57,8 @@ private val TextMain = Color(0xFFE8EEF9)
 private val TextDim = Color(0xFF93A0B8)
 
 /**
- * Full visual e2e suite: real Tao window, real WebKit, every major API path.
+ * Full visual e2e suite: real Tao window, real desktop WebView
+ * (WebKit2GTK on Linux / WebView2 on Windows), every major API path.
  * Writes a machine-readable report and calls [onFinished] with success flag.
  */
 @Composable

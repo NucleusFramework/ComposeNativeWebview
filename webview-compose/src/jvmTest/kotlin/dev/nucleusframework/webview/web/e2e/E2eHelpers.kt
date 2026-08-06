@@ -4,14 +4,20 @@ import dev.nucleusframework.webview.web.LoadingState
 import dev.nucleusframework.webview.web.WebViewNavigator
 import dev.nucleusframework.webview.web.WebViewState
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 
+internal fun isLiveDesktopWebView(state: WebViewState): Boolean {
+    val nv = state.webView?.nativeWebView ?: return false
+    return nv.isReady() &&
+        (nv is LinuxWebKitNativeWebView || nv is WindowsWebView2NativeWebView)
+}
+
 internal suspend fun awaitWebViewReady(state: WebViewState, timeoutMs: Long = 15_000) {
     awaitUntil("webview attached", timeoutMs) {
-        val nv = state.webView?.nativeWebView
-        nv is LinuxWebKitNativeWebView && nv.isReady()
+        isLiveDesktopWebView(state)
     }
 }
 

@@ -42,10 +42,11 @@ fun WebView(
                 val lastLoadedUrlFlow =
                     snapshotFlow { state.lastLoadedUrl }.filter { !it.isNullOrEmpty() }
 
+                // Inject on Finished *or* URL change. Gating only on Finished misses
+                // navigations that never leave Finished in the Compose poller
+                // (e.g. very fast data: loads on WebView2).
                 merge(loadingStateFlow, lastLoadedUrlFlow).collect {
-                    if (state.loadingState is LoadingState.Finished) {
-                        wv.injectJsBridge()
-                    }
+                    wv.injectJsBridge()
                 }
             }
         }

@@ -6,7 +6,8 @@
 - `webview-compose/`: Compose Multiplatform WebView library exposing `dev.nucleusframework.webview.*`
   (`WebView`, `WebViewState`, `WebViewNavigator`).
   - Shared API/types: `webview-compose/src/commonMain/kotlin/...`.
-  - Platform actuals: `.../src/jvmMain/` (desktop no-op), `.../src/androidMain/` (Android WebView),
+  - Platform actuals: `.../src/jvmMain/` (desktop: Linux WebKit2GTK + Windows WebView2),
+    `.../src/androidMain/` (Android WebView),
     `.../src/iosMain/` (WKWebView + cinterop in `.../src/nativeInterop/`), `.../src/wasmJsMain/` (IFrame).
 - `webview-compose-test/`: JVM testing helpers (Playwright-backed mock WebView).
 - Generated/build outputs live under `*/build/` (don’t edit or commit).
@@ -15,16 +16,21 @@
 
 - `./gradlew build`: builds all modules.
 - `./gradlew :demo:run`: runs the desktop demo via the Nucleus application plugin
-  (Tao backend + WebKit2GTK on Linux; visual e2e suite entrypoint).
+  (Tao backend + WebKit2GTK on Linux / WebView2 on Windows; visual e2e suite entrypoint).
 - `./gradlew :webview-compose:buildNativeLinux`: builds
   `libcompose_webview_linux.so` for the host arch into
   `webview-compose/src/jvmMain/resources/nucleus/native/linux-{x64,aarch64}/`
   (requires `libwebkit2gtk-4.1-dev` + `libgtk-3-dev` + JDK).
   Or: `bash webview-compose/src/jvmMain/native/linux/build.sh`.
+- `./gradlew :webview-compose:buildNativeWindows`: builds
+  `compose_webview_windows.dll` + `WebView2Loader.dll` into
+  `webview-compose/src/jvmMain/resources/nucleus/native/win32-{x64,aarch64}/`
+  (requires MSVC, JDK with `JAVA_HOME`, network for first-run nuget WebView2 SDK).
+  Or: `webview-compose\src\jvmMain\native\windows\build.bat`.
 - CI: `.github/workflows/build-natives.yaml` matrix builds **linux-x64**
-  (`ubuntu-latest`) and **linux-aarch64** (`ubuntu-24.04-arm`), uploads
-  artifacts; PR/publish workflows download them before compile/publish.
-  Natives are **not** committed (see `.gitignore`).
+  (`ubuntu-latest`), **linux-aarch64** (`ubuntu-24.04-arm`), and **windows-x64**
+  (`windows-latest`), uploads artifacts; PR/publish workflows download them
+  before compile/publish. Natives are **not** committed (see `.gitignore`).
 - GraalVM (demo): `nucleus.application { graalvm { isEnabled = true … } }`.
   Library reachability metadata lives under
   `webview-compose/src/jvmMain/resources/META-INF/native-image/dev.nucleusframework/composewebview/`
@@ -51,4 +57,4 @@
 
 ## Security & Configuration Tips
 
-- Platform builds may require system deps (Android SDK, Xcode for iOS); call out any new requirements in the PR description.
+- Platform builds may require system deps (Android SDK, Xcode for iOS, WebView2 Runtime on Windows); call out any new requirements in the PR description.

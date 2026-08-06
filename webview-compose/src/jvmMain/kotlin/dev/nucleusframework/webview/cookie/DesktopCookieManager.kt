@@ -3,6 +3,7 @@ package dev.nucleusframework.webview.cookie
 import dev.nucleusframework.webview.util.KLogger
 import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -10,8 +11,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Desktop cookie manager. On Linux, backed by WebKit2GTK's cookie manager.
- * No-op on other desktop platforms.
+ * Desktop cookie manager. Backed by WebKit2GTK on Linux and WebView2 on
+ * Windows. No-op on other desktop platforms.
  */
 internal class DesktopCookieManager : CookieManager {
     @Volatile
@@ -27,37 +28,59 @@ internal class DesktopCookieManager : CookieManager {
         this.nativeWebView = webView
     }
 
+    private fun sameSiteString(cookie: Cookie): String? =
+        when (cookie.sameSite) {
+            Cookie.HTTPCookieSameSitePolicy.NONE -> "None"
+            Cookie.HTTPCookieSameSitePolicy.STRICT -> "Strict"
+            Cookie.HTTPCookieSameSitePolicy.LAX -> "Lax"
+            null -> null
+        }
+
     override suspend fun setCookie(url: String, cookie: Cookie) {
-        val linux = nativeWebView as? LinuxWebKitNativeWebView ?: return
+        val native = nativeWebView
+        val domain =
+            cookie.domain
+                ?: runCatching { java.net.URI(url).host }.getOrNull()
         withContext(Dispatchers.Main) {
             KLogger.d(tag = "DesktopCookieManager") { "setCookie url=$url name=${cookie.name}" }
-            val domain =
-                cookie.domain
-                    ?: runCatching { java.net.URI(url).host }.getOrNull()
-            linux.setCookieNative(
-                name = cookie.name,
-                value = cookie.value,
-                domain = domain,
-                path = cookie.path ?: "/",
-                secure = cookie.isSecure == true,
-                httpOnly = cookie.isHttpOnly == true,
-                expiresMs = cookie.expiresDate ?: 0L,
-                sameSite =
-                    when (cookie.sameSite) {
-                        Cookie.HTTPCookieSameSitePolicy.NONE -> "None"
-                        Cookie.HTTPCookieSameSitePolicy.STRICT -> "Strict"
-                        Cookie.HTTPCookieSameSitePolicy.LAX -> "Lax"
-                        null -> null
-                    },
-            )
+            when (native) {
+                is LinuxWebKitNativeWebView ->
+                    native.setCookieNative(
+                        name = cookie.name,
+                        value = cookie.value,
+                        domain = domain,
+                        path = cookie.path ?: "/",
+                        secure = cookie.isSecure == true,
+                        httpOnly = cookie.isHttpOnly == true,
+                        expiresMs = cookie.expiresDate ?: 0L,
+                        sameSite = sameSiteString(cookie),
+                    )
+                is WindowsWebView2NativeWebView ->
+                    native.setCookieNative(
+                        name = cookie.name,
+                        value = cookie.value,
+                        domain = domain,
+                        path = cookie.path ?: "/",
+                        secure = cookie.isSecure == true,
+                        httpOnly = cookie.isHttpOnly == true,
+                        expiresMs = cookie.expiresDate ?: 0L,
+                        sameSite = sameSiteString(cookie),
+                    )
+                else -> Unit
+            }
         }
     }
 
     override suspend fun getCookies(url: String): List<Cookie> {
-        val linux = nativeWebView as? LinuxWebKitNativeWebView ?: return emptyList()
+        val native = nativeWebView
         return withContext(Dispatchers.Main) {
             runCatching {
-                val raw = linux.getCookiesJson(url)
+                val raw =
+                    when (native) {
+                        is LinuxWebKitNativeWebView -> native.getCookiesJson(url)
+                        is WindowsWebView2NativeWebView -> native.getCookiesJson(url)
+                        else -> return@withContext emptyList()
+                    }
                 json.decodeFromString<List<NativeCookieDto>>(raw).map { it.toCookie() }
             }.getOrElse {
                 KLogger.e(it, tag = "DesktopCookieManager") { "getCookies failed url=$url" }
@@ -67,20 +90,30 @@ internal class DesktopCookieManager : CookieManager {
     }
 
     override suspend fun removeAllCookies() {
-        val linux = nativeWebView as? LinuxWebKitNativeWebView ?: return
+        val native = nativeWebView
         withContext(Dispatchers.Main) {
-            runCatching { linux.removeAllCookiesNative() }
-                .onFailure { KLogger.e(it, tag = "DesktopCookieManager") { "removeAllCookies failed" } }
+            runCatching {
+                when (native) {
+                    is LinuxWebKitNativeWebView -> native.removeAllCookiesNative()
+                    is WindowsWebView2NativeWebView -> native.removeAllCookiesNative()
+                    else -> Unit
+                }
+            }.onFailure { KLogger.e(it, tag = "DesktopCookieManager") { "removeAllCookies failed" } }
         }
     }
 
     override suspend fun removeCookies(url: String) {
-        val linux = nativeWebView as? LinuxWebKitNativeWebView ?: return
+        val native = nativeWebView
         withContext(Dispatchers.Main) {
-            runCatching { linux.removeCookiesForUrlNative(url) }
-                .onFailure {
-                    KLogger.e(it, tag = "DesktopCookieManager") { "removeCookies failed url=$url" }
+            runCatching {
+                when (native) {
+                    is LinuxWebKitNativeWebView -> native.removeCookiesForUrlNative(url)
+                    is WindowsWebView2NativeWebView -> native.removeCookiesForUrlNative(url)
+                    else -> Unit
                 }
+            }.onFailure {
+                KLogger.e(it, tag = "DesktopCookieManager") { "removeCookies failed url=$url" }
+            }
         }
     }
 }

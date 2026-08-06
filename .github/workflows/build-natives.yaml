@@ -3,13 +3,13 @@ name: Build Native Libraries
 on:
   workflow_call:
 
-# Native binaries are a pure function of the C sources. Each platform job caches
-# its output tree keyed on a hash of every src/**/native/** file (plus this
-# workflow). On a cache hit the compile steps are skipped and the job only
+# Native binaries are a pure function of the C/C++ sources. Each platform job
+# caches its output tree keyed on a hash of every src/**/native/** file (plus
+# this workflow). On a cache hit the compile steps are skipped and the job only
 # verifies + re-uploads the artifact for downstream consumers.
 #
-# Currently only Linux is built (WebKit2GTK backend). Windows/macOS stay no-op
-# until their native backends land — add matrix jobs then.
+# Platforms: Linux (WebKit2GTK) + Windows (WebView2). macOS stays no-op until
+# the WKWebView backend lands.
 #
 # Bump the `natives-v1` prefix to force a full rebuild.
 
@@ -84,4 +84,52 @@ jobs:
         with:
           name: natives-linux-${{ matrix.arch }}
           path: 'webview-compose/src/jvmMain/resources/nucleus/native/linux-*/'
+          retention-days: 1
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Restore native output cache
+        id: natives-cache
+        uses: actions/cache@v4
+        with:
+          path: 'webview-compose/src/jvmMain/resources/nucleus/native/win32-*'
+          key: natives-v1-windows-x64-${{ hashFiles('webview-compose/src/jvmMain/native/**', '.github/workflows/build-natives.yaml') }}
+
+      - name: Setup JDK 21
+        if: steps.natives-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build compose WebView Windows native library
+        if: steps.natives-cache.outputs.cache-hit != 'true'
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        shell: cmd
+        run: webview-compose\src\jvmMain\native\windows\build.bat
+
+      - name: Verify Windows natives
+        shell: bash
+        run: |
+          f="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/compose_webview_windows.dll"
+          loader="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/WebView2Loader.dll"
+          if [ -f "$f" ] && [ -f "$loader" ]; then
+            echo "OK: $f ($(wc -c < "$f") bytes)"
+            echo "OK: $loader ($(wc -c < "$loader") bytes)"
+          else
+            echo "MISSING: $f and/or $loader" >&2
+            find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Upload Windows natives
+        uses: actions/upload-artifact@v4
+        with:
+          name: natives-windows-x64
+          path: 'webview-compose/src/jvmMain/resources/nucleus/native/win32-*/'
           retention-days: 1

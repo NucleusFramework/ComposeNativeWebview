@@ -2,12 +2,14 @@ package dev.nucleusframework.webview.demo.visualsuite
 
 import java.io.File
 
-internal const val DEFAULT_REPORT_PATH =
-    "/tmp/composewebview-visual-suite-report.txt"
+internal fun defaultReportPath(): String {
+    val dir = System.getProperty("java.io.tmpdir")?.trimEnd('/', '\\') ?: "."
+    return "$dir${File.separator}composewebview-visual-suite-report.txt"
+}
 
 internal fun writeSuiteReport(
     report: SuiteReport,
-    path: String = System.getenv("COMPOSEWEBVIEW_SUITE_REPORT") ?: DEFAULT_REPORT_PATH,
+    path: String = System.getenv("COMPOSEWEBVIEW_SUITE_REPORT") ?: defaultReportPath(),
 ): String {
     val duration = report.finishedAtMs - report.startedAtMs
     val body =
@@ -33,7 +35,10 @@ internal fun writeSuiteReport(
                 }
             }
         }
-    File(path).writeText(body)
+    File(path).apply {
+        parentFile?.mkdirs()
+        writeText(body)
+    }
     // Also mirror to stdout for CI logs
     println(body)
     return path

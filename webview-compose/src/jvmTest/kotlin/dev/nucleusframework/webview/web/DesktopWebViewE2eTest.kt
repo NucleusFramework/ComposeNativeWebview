@@ -9,37 +9,49 @@ import dev.nucleusframework.application.nucleusApplication
 import dev.nucleusframework.core.runtime.Platform
 import dev.nucleusframework.webview.web.e2e.E2eHost
 import dev.nucleusframework.webview.web.linux.WebKitLinuxBridge
+import dev.nucleusframework.webview.web.windows.WebView2WindowsBridge
 import dev.nucleusframework.window.TitleBar
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.fail
 
 /**
- * End-to-end tests against a real WebKit2GTK WebView embedded via Nucleus
+ * End-to-end tests against a real desktop WebView embedded via Nucleus
  * NativeView + Tao backend. No mocks.
  *
+ *  - **Linux**: WebKit2GTK (`compose_webview_linux`)
+ *  - **Windows**: WebView2 (`compose_webview_windows`)
+ *
  * Drivers live in [dev.nucleusframework.webview.web.e2e].
- * Requires Linux + display + libwebkit2gtk (self-skips otherwise).
+ * Self-skips when the host OS/backend is unavailable.
  */
-class LinuxWebViewE2eTest {
+class DesktopWebViewE2eTest {
     @Test
     fun allDesktopWebViewFeaturesE2e() {
-        if (Platform.Current != Platform.Linux) {
-            println("SKIPPED: Linux-only e2e (current=${Platform.Current})")
-            return
-        }
-        if (!WebKitLinuxBridge.isLoaded) {
-            println("SKIPPED: compose_webview_linux native library not loaded")
-            return
-        }
-        if (System.getenv("DISPLAY").isNullOrBlank() &&
-            System.getenv("WAYLAND_DISPLAY").isNullOrBlank()
-        ) {
-            println("SKIPPED: no DISPLAY / WAYLAND_DISPLAY")
-            return
+        when (Platform.Current) {
+            Platform.Linux -> {
+                if (!WebKitLinuxBridge.isLoaded) {
+                    println("SKIPPED: compose_webview_linux native library not loaded")
+                    return
+                }
+                if (System.getenv("DISPLAY").isNullOrBlank() &&
+                    System.getenv("WAYLAND_DISPLAY").isNullOrBlank()
+                ) {
+                    println("SKIPPED: no DISPLAY / WAYLAND_DISPLAY")
+                    return
+                }
+            }
+            Platform.Windows -> {
+                if (!WebView2WindowsBridge.isLoaded) {
+                    println("SKIPPED: compose_webview_windows native library not loaded")
+                    return
+                }
+            }
+            else -> {
+                println("SKIPPED: desktop e2e unsupported on ${Platform.Current}")
+                return
+            }
         }
 
         val failures = CopyOnWriteArrayList<String>()
