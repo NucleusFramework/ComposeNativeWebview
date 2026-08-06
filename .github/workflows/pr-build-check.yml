@@ -3,22 +3,68 @@ name: PR Build Check
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr-build-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  build-natives:
+    uses: ./.github/workflows/build-natives.yaml
+
   build:
+    needs: build-natives
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+
+      - name: Verify natives present
+        run: |
+          EXPECTED=(
+            "webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
+            "webview-compose/src/jvmMain/resources/nucleus/native/linux-aarch64/libcompose_webview_linux.so"
+          )
+          MISSING=0
+          for f in "${EXPECTED[@]}"; do
+            if [ -f "$f" ]; then
+              echo "OK: $f ($(wc -c < "$f") bytes)"
+            else
+              echo "MISSING: $f" >&2
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" = "1" ]; then exit 1; fi
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
-          distribution: "temurin"
+          java-version: '17'
+          distribution: temurin
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install runtime deps for compile (headers not required)
+        run: |
+          # No native rebuild here — artifacts already downloaded.
+          true
+
       - name: Build
-        run: ./gradlew :webview-compose:compileKotlinJvm :webview-compose:compileDebugKotlinAndroid :demo:compileKotlinJvm --no-configuration-cache
+        run: >
+          ./gradlew
+          :webview-compose:compileKotlinJvm
+          :webview-compose:compileDebugKotlinAndroid
+          :demo:compileKotlinJvm
+          --no-configuration-cache

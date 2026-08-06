@@ -5,12 +5,34 @@ on:
     types: [published]
 
 jobs:
+  build-natives:
+    if: startsWith(github.event.release.tag_name, 'v')
+    uses: ./.github/workflows/build-natives.yaml
+
   publish:
     if: startsWith(github.event.release.tag_name, 'v')
+    needs: build-natives
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+
+      - name: Verify natives present
+        run: |
+          EXPECTED=(
+            "webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
+            "webview-compose/src/jvmMain/resources/nucleus/native/linux-aarch64/libcompose_webview_linux.so"
+          )
+          for f in "${EXPECTED[@]}"; do
+            test -f "$f" || { echo "MISSING: $f" >&2; exit 1; }
+            echo "OK: $f ($(wc -c < "$f") bytes)"
+          done
 
       - name: Set version from tag
         shell: bash
@@ -24,11 +46,14 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: "17"
-          distribution: "temurin"
+          java-version: '17'
+          distribution: temurin
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Publish to Maven Central
         run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache

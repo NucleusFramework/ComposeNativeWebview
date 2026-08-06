@@ -24,7 +24,7 @@ If you already know **compose-webview-multiplatform**, you already know how to u
 
 * Multiplatform packaging under NucleusFramework (`dev.nucleusframework`)
 * **WasmJs** target via **IFrame**
-* Desktop (JVM) API surface (currently a **no-op** backend; no native rendering yet)
+* Desktop (JVM) via **Nucleus Tao + NativeView** (Linux WebKit2GTK; Windows/macOS no-op for now)
 
 ---
 
@@ -33,7 +33,7 @@ If you already know **compose-webview-multiplatform**, you already know how to u
 - **Android**: `android.webkit.WebView`
 - **iOS**: `WKWebView`
 - **WasmJs**: `org.w3c.dom.HTMLIFrameElement`
-- **Desktop**: no-op stub (all operations are empty; composable renders an empty box)
+- **Desktop**: Nucleus Tao `NativeView` + WebKit2GTK on Linux (requires `nucleusApplication` / Tao backend). Windows/macOS stay no-op until their backends land.
 
 ---
 
@@ -69,7 +69,7 @@ Same artifact for **Android, iOS, Desktop and WasmJs**.
 
 Run the feature showcase first:
 
-* **Desktop**: `./gradlew :demo:run` (WebView area is empty until a desktop backend lands)
+* **Desktop**: `./gradlew :demo:run` (Nucleus application plugin; visual e2e suite on Linux)
 * **Android**: `./gradlew :demo-android:installDebug`
 * **WasmJs**: `./gradlew :demo-wasmJs:wasmJsBrowserDevelopmentRun`
 * **iOS**: open `iosApp/iosApp.xcodeproj` in Xcode and Run
@@ -123,7 +123,7 @@ navigator.evaluateJavaScript("document.title = 'Hello'")
 
 * injected automatically after page load
 * callback-based
-* works on Android / iOS / WasmJs (desktop no-op)
+* works on Android / iOS / WasmJs / Desktop (Linux WebKit)
 
 ```js
 window.kmpJsBridge.callNative("echo", {...}, callback)
@@ -210,7 +210,7 @@ state.webSettings.logSeverity = KLogSeverity.Debug
 ## Limitations
 
 * RequestInterceptor does **not** intercept sub-resources
-* **Desktop** is a no-op: no rendering, navigation, cookies, or JS execution
+* **Desktop**: requires Nucleus Tao (`nucleusApplication` + `decorated-window-tao`). Linux is fully wired (WebKit2GTK); Windows/macOS are still no-op.
 * **WasmJs**:
   * Navigation back and forward is not available in the IFrame
   * The IFrame will work only if the target website has appropriately configured its CORS

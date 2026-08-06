@@ -59,7 +59,9 @@ fun App() {
         val webViewState =
             rememberWebViewState("https://httpbin.org/html") {
                 logSeverity = KLogSeverity.Info
-                desktopWebSettings.transparent = true
+                // Opaque white page surface (normal browser). Set transparent=true
+                // only if you need Compose content to show through the WebView.
+                desktopWebSettings.transparent = false
                 backgroundColor = androidx.compose.ui.graphics.Color.White
             }
         val jsBridge = rememberWebViewJsBridge(navigator)

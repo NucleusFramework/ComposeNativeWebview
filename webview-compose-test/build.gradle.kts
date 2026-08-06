@@ -12,10 +12,6 @@ kotlin {
         commonMain.dependencies {
             api(project(":webview-compose"))
         }
-
-        jvmMain.dependencies {
-            api(libs.playwright)
-        }
     }
 }
 

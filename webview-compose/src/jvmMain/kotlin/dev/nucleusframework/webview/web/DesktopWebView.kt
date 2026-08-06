@@ -1,11 +1,16 @@
 package dev.nucleusframework.webview.web
 
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
+import dev.nucleusframework.webview.util.KLogger
+import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
+import java.net.URL
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * Desktop [IWebView] implementation. All operations are no-ops until a native
- * backend is wired back in.
+ * Desktop [IWebView] implementation.
+ *
+ * On Linux (WebKit2GTK via Tao/NativeView) all operations hit the real
+ * native backend. On other desktop OSes this remains a no-op shell.
  */
 internal class DesktopWebView(
     override val nativeWebView: NativeWebView,
@@ -35,13 +40,68 @@ internal class DesktopWebView(
         historyUrl: String?,
     ) {
         if (html == null) return
-        nativeWebView.loadHtml(html)
+        val linux = nativeWebView as? LinuxWebKitNativeWebView
+        if (linux != null) {
+            linux.loadHtml(html, baseUrl)
+        } else {
+            nativeWebView.loadHtml(html)
+        }
     }
 
     override suspend fun loadHtmlFile(
         fileName: String,
         readType: WebViewFileReadType,
-    ) = Unit
+    ) {
+        val html = runCatching {
+            when (readType) {
+                WebViewFileReadType.ASSET_RESOURCES -> {
+                    val normalized = fileName.removePrefix("/")
+                    val candidates = linkedSetOf<String>()
+                    if (
+                        normalized.startsWith("assets/") ||
+                        normalized.startsWith("compose-resources/") ||
+                        normalized.startsWith("composeResources/")
+                    ) {
+                        candidates.add(normalized)
+                    }
+                    candidates.add("assets/$normalized")
+                    candidates.add("compose-resources/files/$normalized")
+                    candidates.add("compose-resources/assets/$normalized")
+                    candidates.add("composeResources/files/$normalized")
+                    candidates.add("composeResources/assets/$normalized")
+                    val loaders =
+                        listOfNotNull(
+                            Thread.currentThread().contextClassLoader,
+                            this::class.java.classLoader,
+                        )
+                    candidates.firstNotNullOfOrNull { path ->
+                        loaders.firstNotNullOfOrNull { loader ->
+                            loader.getResourceAsStream(path)
+                        }?.use { it.readBytes().toString(Charsets.UTF_8) }
+                    } ?: error("Resource not found: ${candidates.joinToString()}")
+                }
+
+                WebViewFileReadType.COMPOSE_RESOURCE_FILES ->
+                    URL(fileName).openStream().use { it.readBytes().toString(Charsets.UTF_8) }
+            }
+        }.getOrElse { e ->
+            val errorHtml =
+                """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Error Loading File</title></head>
+                <body>
+                  <h2>Error Loading File</h2>
+                  <p>File: $fileName (ReadType: $readType)</p>
+                  <pre>${e.stackTraceToString()}</pre>
+                </body>
+                </html>
+                """.trimIndent()
+            KLogger.e(e, tag = "DesktopWebView") { "loadHtmlFile failed" }
+            errorHtml
+        }
+        nativeWebView.loadHtml(html)
+    }
 
     override fun goBack() = nativeWebView.goBack()
 
@@ -52,17 +112,38 @@ internal class DesktopWebView(
     override fun stopLoading() = nativeWebView.stopLoading()
 
     override fun evaluateJavaScript(script: String, callback: ((String) -> Unit)?) {
+        KLogger.d { "evaluateJavaScript: $script" }
         nativeWebView.evaluateJavaScript(script) { result ->
             callback?.invoke(result)
         }
     }
 
-    override suspend fun captureScreenshotOrNull(): ByteArray? =
-        nativeWebView.captureScreenshotNative()
-
-    override fun injectJsBridge() {
-        // No-op on desktop until a native JS bridge backend is available.
+    override suspend fun captureScreenshotOrNull(): ByteArray? {
+        val linux = nativeWebView as? LinuxWebKitNativeWebView
+        if (linux != null) {
+            return linux.captureScreenshotAsync()
+        }
+        val nativeBytes = nativeWebView.captureScreenshotNative()
+        if (nativeBytes != null) return nativeBytes
+        return null
     }
 
-    override fun initJsBridge(webViewJsBridge: WebViewJsBridge) = Unit
+    override fun injectJsBridge() {
+        val bridge = webViewJsBridge ?: return
+        super.injectJsBridge()
+
+        val js =
+            """
+            if (window.${bridge.jsBridgeName} && window.ipc && window.ipc.postMessage) {
+                window.${bridge.jsBridgeName}.postMessage = function (message) {
+                    window.ipc.postMessage(message);
+                };
+            }
+            """.trimIndent()
+        evaluateJavaScript(js)
+    }
+
+    override fun initJsBridge(webViewJsBridge: WebViewJsBridge) {
+        // IPC is wired natively via WebKit user-content script message handler "ipc".
+    }
 }

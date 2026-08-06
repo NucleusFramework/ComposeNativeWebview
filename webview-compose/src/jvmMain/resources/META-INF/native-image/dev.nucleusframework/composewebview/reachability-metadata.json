@@ -1,0 +1,82 @@
+{
+  "reflection": [
+    {
+      "type": "dev.nucleusframework.webview.web.linux.WebKitLinuxBridge",
+      "jniAccessible": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true,
+      "methods": [
+        { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnJsResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnCookiesResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnScreenshotResult", "parameterTypes": ["long", "byte[]"] }
+      ]
+    },
+    {
+      "type": "dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.web.NativeWebView",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.web.DesktopWebView",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.cookie.DesktopCookieManager",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.cookie.NativeCookieDto",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.cookie.NativeCookieDto[]"
+    },
+    {
+      "type": "dev.nucleusframework.webview.jsbridge.JsMessage",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.jsbridge.WebViewJsBridge",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    }
+  ],
+  "resources": [
+    { "glob": "nucleus/native/**" },
+    { "glob": "META-INF/native-image/dev.nucleusframework/composewebview/**" }
+  ],
+  "serialization": [
+    { "type": "dev.nucleusframework.webview.cookie.Cookie" },
+    { "type": "dev.nucleusframework.webview.cookie.Cookie$HTTPCookieSameSitePolicy" },
+    { "type": "dev.nucleusframework.webview.cookie.NativeCookieDto" },
+    { "type": "dev.nucleusframework.webview.jsbridge.JsMessage" },
+    { "type": "kotlin.collections.ArrayList" },
+    { "type": "kotlin.collections.EmptyList" }
+  ],
+  "jni": [
+    {
+      "type": "dev.nucleusframework.webview.web.linux.WebKitLinuxBridge",
+      "methods": [
+        { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnJsResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnCookiesResult", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnScreenshotResult", "parameterTypes": ["long", "byte[]"] }
+      ]
+    }
+  ]
+}

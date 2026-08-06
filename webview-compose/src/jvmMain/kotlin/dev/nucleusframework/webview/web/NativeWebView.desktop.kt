@@ -1,10 +1,11 @@
 package dev.nucleusframework.webview.web
 
 /**
- * Desktop [NativeWebView] placeholder.
+ * Desktop [NativeWebView] base.
  *
- * Desktop WebView is currently a no-op: all operations are intentionally empty
- * so the shared API compiles and demos run without a native backend.
+ * On Linux with the Tao backend, the default factory creates a
+ * [dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView].
+ * Windows and macOS remain no-ops until their native backends land.
  */
 actual open class NativeWebView {
     open fun isReady(): Boolean = false

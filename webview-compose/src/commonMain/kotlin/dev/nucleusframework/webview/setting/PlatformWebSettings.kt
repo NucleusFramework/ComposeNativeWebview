@@ -14,7 +14,12 @@ sealed class PlatformWebSettings {
     ) : PlatformWebSettings()
 
     data class DesktopWebSettings(
-        var transparent: Boolean = true,
+        /**
+         * When false (default), the page paints on an opaque white surface like a
+         * normal browser. When true, the WebView chrome is fully transparent so
+         * Compose content underneath can show through.
+         */
+        var transparent: Boolean = false,
         var dataDirectory: String? = null,
         var initScript: String? = null,
         var enableClipboard: Boolean = true,

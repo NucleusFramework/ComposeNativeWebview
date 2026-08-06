@@ -18,6 +18,10 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# Platform natives are built in CI (matrix) / locally via build scripts.
+# Same layout as Nucleus: resources/nucleus/native/{linux,darwin,win32}-*
+**/src/**/resources/nucleus/native/
+
 # Node
 node_modules/
 
