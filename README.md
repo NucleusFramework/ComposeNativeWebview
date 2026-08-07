@@ -18,6 +18,8 @@ dev.nucleusframework.webview.*
 >    - App entry: `nucleusApplication(backend = NucleusBackend.Tao) { … }`
 >    - Dependencies: Nucleus application + `decorated-window-tao` (Swing/Compose Desktop without Tao will not host the WebView)
 >
+>    **Why Tao?** Native WebViews are opaque platform surfaces. Tao’s `NativeView` embeds them in the same window stack as Compose, so you can **draw Compose UI on top of the WebView** (toolbars, dialogs, loading overlays, chrome) instead of fighting a separate HWND/GTK child. You also get the rest of Tao’s desktop stack (decorated window, title bar, input routing, multiplatform windowing) in one path.
+>
 > Android, iOS and WasmJs keep the same API shape; only the package and Maven group change.
 
 ### What is reused vs what is new
