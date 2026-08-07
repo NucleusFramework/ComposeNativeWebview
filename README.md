@@ -9,6 +9,17 @@ Package namespace:
 dev.nucleusframework.webview.*
 ```
 
+> **⚠️ Breaking change (v1.0.0+)** — migrating from pre-Nucleus / Wry builds
+>
+> 1. **Classpath / package** — rename imports and package references:
+>    - `io.github.kdroidfilter.webview.*` → `dev.nucleusframework.webview.*`
+>    - Maven coordinates: `io.github.kdroidfilter:…` → `dev.nucleusframework:composewebview`
+> 2. **Desktop is Tao-only** — the old **Wry** desktop backend is **removed**. Desktop WebView requires the **Nucleus Tao** backend (`NativeView`):
+>    - App entry: `nucleusApplication(backend = NucleusBackend.Tao) { … }`
+>    - Dependencies: Nucleus application + `decorated-window-tao` (Swing/Compose Desktop without Tao will not host the WebView)
+>
+> Android, iOS and WasmJs keep the same API shape; only the package and Maven group change.
+
 ### What is reused vs what is new
 
 **Reused on purpose**
