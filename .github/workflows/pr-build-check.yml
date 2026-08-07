@@ -3,61 +3,336 @@ name: PR Build Check
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr-build-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Unit logic: webview-compose/src/commonTest (same packages on all targets).
+# Real WebView e2e: e2e-shared VisualSuiteApp via e2e-desktop / e2e-android / e2e-wasmJs / iosApp.
+# The old jvmTest driver suite and Playwright mocks are gone.
+
+env:
+  # Same filter string for every platform so CI cannot drift.
+  COMMON_TEST_ARGS: >-
+    --tests dev.nucleusframework.webview.jsbridge.*
+    --tests dev.nucleusframework.webview.web.*
+    --tests dev.nucleusframework.webview.request.*
+    --tests dev.nucleusframework.webview.cookie.*
+    --tests dev.nucleusframework.webview.setting.*
 
 jobs:
-  build-rust-macos-aarch64:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  build-natives:
+    uses: ./.github/workflows/build-natives.yaml
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Rust library
-        working-directory: wrywebview
-        run: cargo build --release --target aarch64-apple-darwin
-
-  build-rust-macos-x86_64:
-    runs-on: macos-15-intel
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Rust library
-        working-directory: wrywebview
-        run: cargo build --release --target x86_64-apple-darwin
-
-  build-rust-linux:
+  # ── Same commonTest suite on JVM ──────────────────────────────────────────
+  common-tests-jvm:
+    needs: build-natives
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+          # Artifacts are rooted at {linux,darwin,win32}-*/ — place them where the
+          # JVM resource loader and buildNative* onlyIf checks expect them.
+          path: webview-compose/src/jvmMain/resources/nucleus/native
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
 
-      - name: Build Rust library
-        working-directory: wrywebview
-        run: cargo build --release --target x86_64-unknown-linux-gnu
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-  build-rust-windows:
-    runs-on: windows-latest
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile all targets used by the library + e2e harness
+        run: >
+          ./gradlew
+          :webview-compose:compileKotlinJvm
+          :webview-compose:compileDebugKotlinAndroid
+          :webview-compose:compileKotlinWasmJs
+          :e2e-shared:compileKotlinJvm
+          :e2e-shared:compileDebugKotlinAndroid
+          :e2e-shared:compileKotlinWasmJs
+          :e2e-desktop:compileKotlinJvm
+          :e2e-android:compileDebugKotlinAndroid
+          :e2e-wasmJs:compileKotlinWasmJs
+          --no-configuration-cache
+
+      - name: commonTest on JVM (same packages as Android / iOS / Wasm)
+        run: ./gradlew :webview-compose:jvmTest ${{ env.COMMON_TEST_ARGS }} --no-configuration-cache
+
+  # ── Same commonTest suite on Wasm ─────────────────────────────────────────
+  common-tests-wasm:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
 
-      - name: Build Rust library
-        working-directory: wrywebview
-        run: cargo build --release --target x86_64-pc-windows-msvc
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: commonTest on Wasm browser + compile visual e2e host
+        run: >
+          ./gradlew
+          :webview-compose:wasmJsBrowserTest
+          ${{ env.COMMON_TEST_ARGS }}
+          :e2e-wasmJs:compileKotlinWasmJs
+          :e2e-shared:compileKotlinWasmJs
+          --no-configuration-cache
+
+  # ── Same commonTest suite on Android host + assemble visual e2e APK ───────
+  common-tests-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: commonTest + assemble Android visual e2e suite APK
+        run: >
+          ./gradlew
+          :webview-compose:testDebugUnitTest
+          ${{ env.COMMON_TEST_ARGS }}
+          :e2e-shared:compileDebugKotlinAndroid
+          :e2e-android:assembleDebug
+          --no-configuration-cache
+
+  # ── Android visual e2e (real WebView on emulator) ─────────────────────────
+  e2e-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run visual e2e suite on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          # android-emulator-runner executes the script line-by-line via `sh -c`,
+          # so multi-line shell (backslash continuations, for-loops) must live in
+          # a single script file.
+          script: bash e2e-android/ci-run-suite.sh
+
+  # ── Same commonTest suite on iOS simulator ────────────────────────────────
+  common-tests-ios:
+    # Compose Multiplatform 1.11 needs Xcode 16+ (UIViewLayoutRegion / UIUtilities).
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26+ (Compose 1.11 needs iOS 26 SDK)
+        run: |
+          # CMP 1.11 links UIViewLayoutRegion / UIUtilities from the iOS 26 SDK.
+          # Prefer newest Xcode 26.x on the image; fall back to 16.x only as last resort.
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$XCODE" ]; then
+            XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)
+          fi
+          if [ -n "$XCODE" ]; then
+            echo "Using $XCODE"
+            sudo xcode-select -s "$XCODE"
+          fi
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version || true
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: commonTest on iOS simulator (same packages)
+        run: >
+          ./gradlew
+          :webview-compose:iosSimulatorArm64Test
+          ${{ env.COMMON_TEST_ARGS }}
+          :e2e-shared:compileKotlinIosSimulatorArm64
+          --no-configuration-cache
+
+  # ── Desktop visual e2e (Linux WebKit2GTK) — real WebView, desktop-only ────
+  e2e-linux:
+    needs: build-natives
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+          path: webview-compose/src/jvmMain/resources/nucleus/native
+
+      - name: Verify Linux natives present
+        run: |
+          f="webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
+          test -f "$f" || { echo "MISSING: $f" >&2; find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true; exit 1; }
+          echo "OK: $f ($(wc -c < "$f") bytes)"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install WebKit2GTK runtime + Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libgtk-3-0 \
+            libwebkit2gtk-4.1-0 \
+            || sudo apt-get install -y \
+              xvfb \
+              libgtk-3-0 \
+              libwebkit2gtk-4.0-0
+
+      - name: Visual e2e suite (Tao + WebKit2GTK)
+        run: |
+          xvfb-run -a -s '-screen 0 1920x1080x24' \
+            ./gradlew :e2e-desktop:run --no-configuration-cache
+
+
+  # ── Desktop visual e2e (Windows WebView2) ─────────────────────────────────
+  e2e-windows:
+    needs: build-natives
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+          path: webview-compose/src/jvmMain/resources/nucleus/native
+
+      - name: Verify Windows natives present
+        shell: bash
+        run: |
+          f="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/compose_webview_windows.dll"
+          loader="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/WebView2Loader.dll"
+          test -f "$f" && test -f "$loader" || { echo "MISSING natives" >&2; find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true; exit 1; }
+          echo "OK: $f / $loader"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Visual e2e suite (Tao + WebView2)
+        run: ./gradlew :e2e-desktop:run --no-configuration-cache
+
+
+  # ── Desktop visual e2e (macOS WKWebView) ──────────────────────────────────
+  e2e-macos:
+    needs: build-natives
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: 'natives-*'
+          merge-multiple: true
+          path: webview-compose/src/jvmMain/resources/nucleus/native
+
+      - name: Verify macOS natives present
+        run: |
+          MISSING=0
+          for arch in aarch64 x64; do
+            f="webview-compose/src/jvmMain/resources/nucleus/native/darwin-${arch}/libcompose_webview_macos.dylib"
+            if [ -f "$f" ]; then
+              echo "OK: $f ($(wc -c < "$f") bytes)"
+            else
+              echo "MISSING: $f" >&2
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" = "1" ]; then
+            find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Visual e2e suite (Tao + WKWebView)
+        run: ./gradlew :e2e-desktop:run --no-configuration-cache
+

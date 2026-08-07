@@ -1,25 +1,23 @@
-# wrywebview-compose
+# webview-compose
 
-Compose Desktop wrapper for the `wrywebview` module, exposing the `io.github.kdroidfilter.webview.*` API (inspired by `compose-webview-multiplatform`).
+Compose Multiplatform WebView library exposing the `dev.nucleusframework.webview.*` API
+(inspired by `compose-webview-multiplatform`).
 
-## Usage (JVM)
-
-Add the dependency:
+## Usage
 
 ```kotlin
 dependencies {
-    implementation(project(":wrywebview-compose"))
+    implementation(project(":webview-compose"))
+    // or: implementation("dev.nucleusframework:composewebview:<version>")
 }
 ```
-
-Use the composable:
 
 ```kotlin
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import io.github.kdroidfilter.webview.web.WebView
-import io.github.kdroidfilter.webview.web.rememberWebViewState
+import dev.nucleusframework.webview.web.WebView
+import dev.nucleusframework.webview.web.rememberWebViewState
 
 @Composable
 fun App() {
@@ -28,6 +26,9 @@ fun App() {
 }
 ```
 
-Notes:
-- JVM only.
-- The composable delegates to `WryWebViewPanel` from `:wrywebview`.
+## Platforms
+
+- **Android**: `android.webkit.WebView`
+- **iOS**: `WKWebView`
+- **WasmJs**: `HTMLIFrameElement`
+- **Desktop (JVM)**: Nucleus Tao `NativeView` — WebKit2GTK (Linux), WKWebView (macOS), WebView2 (Windows)

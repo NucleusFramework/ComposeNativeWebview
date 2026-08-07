@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalWasmDsl::class)
 
 import com.vanniktech.maven.publish.KotlinMultiplatform
+import org.apache.tools.ant.taskdefs.condition.Os
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
@@ -10,6 +11,92 @@ plugins {
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.mavenPublish)
+}
+
+// ── Native build (Linux / macOS / Windows) ──────────────────────────────────
+// Same pattern as Nucleus: compile host-arch natives into
+// src/jvmMain/resources/nucleus/native/{linux,darwin,win32}-{x64,aarch64}/.
+// CI builds via matrix and downloads artifacts before package/publish.
+// Locally, only the host platform is built (and only if the artifact is missing).
+
+val nativeLinuxDir = layout.projectDirectory.dir("src/jvmMain/native/linux")
+val nativeMacosDir = layout.projectDirectory.dir("src/jvmMain/native/macos")
+val nativeWindowsDir = layout.projectDirectory.dir("src/jvmMain/native/windows")
+val nativeResourceDir = layout.projectDirectory.dir("src/jvmMain/resources/nucleus/native")
+
+val buildNativeLinux by tasks.registering(Exec::class) {
+    description = "Compiles the WebKit2GTK JNI backend into libcompose_webview_linux.so"
+    group = "build"
+    val arch = System.getProperty("os.arch").lowercase()
+    val archDir =
+        if (arch.contains("aarch64") || arch.contains("arm64")) "linux-aarch64" else "linux-x64"
+    val checkFile = nativeResourceDir.file("$archDir/libcompose_webview_linux.so").asFile
+    onlyIf {
+        Os.isFamily(Os.FAMILY_UNIX) &&
+            !Os.isFamily(Os.FAMILY_MAC) &&
+            !checkFile.exists()
+    }
+    inputs.dir(nativeLinuxDir)
+    outputs.file(checkFile)
+    workingDir(nativeLinuxDir.asFile)
+    commandLine("bash", "build.sh")
+}
+
+val buildNativeMacos by tasks.registering(Exec::class) {
+    description = "Compiles the WKWebView JNI backend into libcompose_webview_macos.dylib"
+    group = "build"
+    // build.sh produces both arm64 and x86_64 dylibs.
+    val checkArm = nativeResourceDir.file("darwin-aarch64/libcompose_webview_macos.dylib").asFile
+    val checkX64 = nativeResourceDir.file("darwin-x64/libcompose_webview_macos.dylib").asFile
+    onlyIf {
+        Os.isFamily(Os.FAMILY_MAC) && (!checkArm.exists() || !checkX64.exists())
+    }
+    inputs.dir(nativeMacosDir)
+    outputs.files(checkArm, checkX64)
+    workingDir(nativeMacosDir.asFile)
+    commandLine("bash", "build.sh")
+}
+
+val buildNativeWindows by tasks.registering(Exec::class) {
+    description = "Compiles the WebView2 JNI backend into compose_webview_windows.dll"
+    group = "build"
+    val arch = System.getProperty("os.arch").lowercase()
+    val archDir =
+        if (arch.contains("aarch64") || arch.contains("arm64")) "win32-aarch64" else "win32-x64"
+    val checkFile = nativeResourceDir.file("$archDir/compose_webview_windows.dll").asFile
+    val loaderFile = nativeResourceDir.file("$archDir/WebView2Loader.dll").asFile
+    onlyIf {
+        Os.isFamily(Os.FAMILY_WINDOWS) && (!checkFile.exists() || !loaderFile.exists())
+    }
+    inputs.dir(nativeWindowsDir)
+    outputs.files(checkFile, loaderFile)
+    workingDir(nativeWindowsDir.asFile)
+    commandLine("cmd", "/c", "build.bat")
+    doLast {
+        check(checkFile.exists()) {
+            "buildNativeWindows finished but ${checkFile.name} is missing. " +
+                "Need MSVC (vcvarsall) + JAVA_HOME. Run: " +
+                "webview-compose\\src\\jvmMain\\native\\windows\\build.bat"
+        }
+        check(loaderFile.exists()) {
+            "buildNativeWindows finished but WebView2Loader.dll is missing next to ${checkFile.name}"
+        }
+    }
+}
+
+// Ensure JVM resources / jar include the native lib when packaging on host OS.
+tasks.matching {
+    it.name == "jvmProcessResources" ||
+        it.name == "processJvmMainResources" ||
+        it.name == "jvmJar"
+}.configureEach {
+    dependsOn(buildNativeLinux, buildNativeMacos, buildNativeWindows)
+}
+
+tasks.configureEach {
+    if (name == "sourcesJar" || name == "jvmSourcesJar") {
+        dependsOn(buildNativeLinux, buildNativeMacos, buildNativeWindows)
+    }
 }
 
 kotlin {
@@ -22,7 +109,6 @@ kotlin {
     }
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
@@ -46,13 +132,19 @@ kotlin {
             implementation(libs.kotlinx.serializationJson)
         }
 
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutinesAndroid)
         }
 
         jvmMain.dependencies {
-            api(project(":wrywebview"))
             implementation(libs.kotlinx.coroutinesSwing)
+            // Desktop WebView embeds via NativeView and requires the Tao backend.
+            api(libs.nucleus.decorated.window.tao)
+            implementation(libs.nucleus.core.runtime)
         }
 
         iosMain.dependencies { }
@@ -62,7 +154,7 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.kdroidfilter.webview"
+    namespace = "dev.nucleusframework.webview"
     compileSdk = 35
 
     defaultConfig {
@@ -105,7 +197,7 @@ fun org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget.setUpiOSObserver()
 }
 
 mavenPublishing {
-    configure(KotlinMultiplatform(androidVariantsToPublish = listOf("release"), sourcesJar = true))
+    configure(KotlinMultiplatform(sourcesJar = true))
     publishToMavenCentral()
     if (project.findProperty("signingInMemoryKey") != null) {
         signAllPublications()

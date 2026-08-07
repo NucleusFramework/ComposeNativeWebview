@@ -1,0 +1,45 @@
+{
+  "reflection": [
+    {
+      "type": "dev.nucleusframework.webview.e2e.MainKt",
+      "methods": [
+        { "name": "main", "parameterTypes": [] },
+        { "name": "main", "parameterTypes": ["java.lang.String[]"] }
+      ]
+    },
+    {
+      "type": "dev.nucleusframework.webview.e2e.visualsuite.VisualSuiteAppKt",
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.e2e.visualsuite.SuiteRunnerKt",
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.e2e.visualsuite.SuiteCase",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.e2e.visualsuite.CaseStatus",
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.e2e.visualsuite.SuiteReport",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true
+    },
+    {
+      "type": "dev.nucleusframework.webview.e2e.visualsuite.SuiteContext",
+      "allDeclaredConstructors": true,
+      "allDeclaredMethods": true,
+      "allDeclaredFields": true
+    }
+  ],
+  "resources": [
+    { "glob": "composeResources/**" },
+    { "glob": "META-INF/native-image/dev.nucleusframework/composewebview-e2e/**" }
+  ]
+}

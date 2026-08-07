@@ -1,56 +1,55 @@
-# ComposeNativeWebView 🌐
+# ComposeNativeWebView
 
 **ComposeNativeWebView** is a **Compose Multiplatform WebView** whose **API design and mobile implementations (Android & iOS) are intentionally derived almost verbatim from
 [KevinnZou/compose-webview-multiplatform](https://github.com/KevinnZou/compose-webview-multiplatform)**.
 
-This project exists **first and foremost to bring that same API to Desktop**, backed by **native OS webviews instead of a bundled Chromium runtime**.
+Package namespace:
 
 ```text
-io.github.kdroidfilter.webview.*
+dev.nucleusframework.webview.*
 ```
 
 ### What is reused vs what is new
 
-🟢 **Reused on purpose**
+**Reused on purpose**
 
 * API surface (`WebViewState`, `WebViewNavigator`, settings, callbacks, mental model)
 * Android implementation (`android.webkit.WebView`)
 * iOS implementation (`WKWebView`)
 * Overall behavior and semantics
 
-👉 If you already know **compose-webview-multiplatform**, you already know how to use this.
+If you already know **compose-webview-multiplatform**, you already know how to use this.
 
-🆕 **What ComposeNativeWebView adds**
+**What ComposeNativeWebView adds**
 
-* **Desktop support with native engines**
-* A **Rust + UniFFI (Wry)** backend instead of KCEF / embedded Chromium
-* A **tiny desktop footprint** with system-provided webviews
-* Handling of the **WasmJs** target via **IFrame** usage
+* Multiplatform packaging under NucleusFramework (`dev.nucleusframework`)
+* **WasmJs** target via **IFrame**
+* Desktop (JVM) via **Nucleus Tao + NativeView** (Linux WebKit2GTK; macOS WKWebView; Windows WebView2)
 
 ---
 
 ## Platform backends
 
-✅ **Android**: `android.webkit.WebView`
-✅ **iOS**: `WKWebView`
-✅ **WasmJs**: `org.w3c.dom.HTMLIFrameElement`
-✅ **Desktop**: **Wry (Rust)** via **UniFFI**
-
-Desktop engines:
-
-* **Windows**: WebView2
-* **macOS**: WKWebView
-* **Linux**: WebKitGTK
+- **Android**: `android.webkit.WebView`
+- **iOS**: `WKWebView`
+- **WasmJs**: `org.w3c.dom.HTMLIFrameElement`
+- **Desktop**: Nucleus Tao `NativeView` (requires `nucleusApplication` / Tao backend).
+  - **Linux**: WebKit2GTK (`libcompose_webview_linux.so`)
+  - **Windows**: WebView2 CompositionController + DirectComposition (`compose_webview_windows.dll`; needs WebView2 Runtime / Edge)
+  - **macOS**: WKWebView (`libcompose_webview_macos.dylib`)
 
 ---
 
-## Quick start 🚀
+## Quick start
 
 ```kotlin
 @Composable
 fun App() {
   val state = rememberWebViewState("https://example.com")
-  WebView(state, Modifier.fillMaxSize())
+  WebView(state, Modifier.fillMaxSize()) {
+    // Optional Compose overlay on top of the native WebView
+    // (NativeView content slot on desktop; Box overlay elsewhere).
+  }
 }
 ```
 
@@ -58,13 +57,13 @@ That’s it.
 
 ---
 
-## Installation 🧩
+## Installation
 
 ### Dependency (all platforms)
 
 ```kotlin
 dependencies {
-  implementation("io.github.kdroidfilter:composewebview:<version>")
+  implementation("dev.nucleusframework:composewebview:<version>")
 }
 ```
 
@@ -72,37 +71,39 @@ Same artifact for **Android, iOS, Desktop and WasmJs**.
 
 ---
 
-### Desktop only: enable native access ⚠️
+## E2E harness & tests
 
-Wry uses native access via JNA.
+### Visual e2e suite (same catalog everywhere)
 
-```kotlin
-compose.desktop {
-  application {
-    jvmArgs += "--enable-native-access=ALL-UNNAMED"
-  }
-}
+`VisualSuiteApp` + `suiteCatalog()` live in **`e2e-shared` commonMain**.
+Every platform host runs that same suite against a **real** WebView:
+
+| Host | Command | Backend |
+|------|---------|---------|
+| Desktop | `./gradlew :e2e-desktop:run` | Tao + WebKit2GTK / WKWebView / WebView2 |
+| Android | `./gradlew :e2e-android:installDebug` then launch app | `android.webkit.WebView` |
+| Wasm | `./gradlew :e2e-wasmJs:wasmJsBrowserDevelopmentRun` | IFrame |
+| iOS | open `iosApp` in Xcode and Run | WKWebView |
+
+Cases that need a platform-only capability (history on Wasm, isolated native
+profiles on desktop, pixel screenshots, …) are **Skipped** with a reason —
+not Failed — so the catalog stays identical.
+
+### Unit suite (`commonTest`)
+
+Same pure-logic packages on JVM / Android host / iOS simulator / Wasm browser:
+
+```bash
+COMMON='--tests dev.nucleusframework.webview.jsbridge.* --tests dev.nucleusframework.webview.web.* --tests dev.nucleusframework.webview.request.* --tests dev.nucleusframework.webview.cookie.* --tests dev.nucleusframework.webview.setting.*'
+./gradlew :webview-compose:jvmTest $COMMON
+./gradlew :webview-compose:testDebugUnitTest $COMMON
+./gradlew :webview-compose:iosSimulatorArm64Test $COMMON   # macOS
+./gradlew :webview-compose:wasmJsBrowserTest $COMMON
 ```
 
 ---
 
-## Demo app 🎮
-
-Run the feature showcase first:
-
-* **Desktop**: `./gradlew :demo:run`
-* **Android**: `./gradlew :demo-android:installDebug`
-* **WasmJs**: `./gradlew :demo-wasmJs:wasmJsBrowserDevelopmentRun`
-* **iOS**: open `iosApp/iosApp.xcodeproj` in Xcode and Run
-
-Responsive UI:
-
-* large screens → side **Tools** panel
-* phones → **bottom sheet**
-
----
-
-## Core features ✨
+## Core features
 
 ### Content loading
 
@@ -110,15 +111,11 @@ Responsive UI:
 * `loadHtml(html)`
 * `loadHtmlFile(fileName, readType)`
 
----
-
 ### Navigation
 
 * `navigateBack()`, `navigateForward()`
 * `reload()`, `stopLoading()`
 * `canGoBack`, `canGoForward`
-
----
 
 ### Observable state
 
@@ -127,9 +124,7 @@ Responsive UI:
 * `lastLoadedUrl`
 * `pageTitle`
 
----
-
-### Cookies 🍪
+### Cookies
 
 Unified cookie API:
 
@@ -140,29 +135,23 @@ state.cookieManager.removeCookies(url)
 state.cookieManager.removeAllCookies()
 ```
 
----
-
 ### JavaScript
 
 ```kotlin
 navigator.evaluateJavaScript("document.title = 'Hello'")
 ```
 
----
-
-### JS ↔ Kotlin bridge 🌉
+### JS ↔ Kotlin bridge
 
 * injected automatically after page load
 * callback-based
-* works on all platforms
+* works on Android / iOS / WasmJs / Desktop (Linux WebKit)
 
 ```js
 window.kmpJsBridge.callNative("echo", {...}, callback)
 ```
 
----
-
-### RequestInterceptor 🚦
+### RequestInterceptor
 
 Intercept **navigator-initiated** navigations only:
 
@@ -181,7 +170,7 @@ Useful for:
 
 ---
 
-## WebViewState & Navigator 📘
+## WebViewState & Navigator
 
 ### State creation
 
@@ -199,8 +188,6 @@ Supports:
 * inline HTML
 * resource files
 
----
-
 ### Navigator
 
 ```kotlin
@@ -217,23 +204,13 @@ Commands:
 
 ---
 
-## Settings ⚙️
+## Settings
 
 ### Custom User-Agent
 
 ```kotlin
 state.webSettings.customUserAgentString = "MyApp/1.2.3"
 ```
-
-Desktop note:
-
-* applied at creation time
-* changing it **recreates** the WebView (debounced)
-* JS context/history may be lost
-
-👉 Set it early.
-
----
 
 ### Logging
 
@@ -243,54 +220,26 @@ state.webSettings.logSeverity = KLogSeverity.Debug
 
 ---
 
-## Desktop advanced 🖥️
+## Project structure
 
-### Access native WebView handle
-
-```kotlin
-WebView(
-  state,
-  navigator,
-  onCreated = { native ->
-    println(native.getCurrentUrl())
-  }
-)
-```
-
-Useful for debugging or platform-specific hooks.
+* `webview-compose/` → Compose Multiplatform API + platform actuals + commonTest
+* `e2e-shared/` → shared multiplatform visual e2e suite (`VisualSuiteApp`)
+* `e2e-desktop/`, `e2e-android/`, `e2e-wasmJs/`, `iosApp/` → platform hosts for that suite
 
 ---
 
-## Project structure 🗂️
-
-* `wrywebview/` → Rust core + UniFFI bindings
-* `wrywebview-compose/` → Compose API
-* `demo-shared/` → shared demo UI
-* `demo/`, `demo-android/`, `demo-wasmJs/`, `iosApp/` → platform launchers
-
----
-
-## Limitations ⚠️
+## Limitations
 
 * RequestInterceptor does **not** intercept sub-resources
-
-### Desktop
-
-* Desktop UA change recreates the WebView
-
-### WasmJs
-
-* Navigation back and forward is not available in the IFrame.
-* The IFrame will work only if the target website has appropriately configured its CORS.
-* JS can be executed only on the same origin.
-* Cookies can be set only for the parent destination (when the destination of the iframe is the same as the parent destination - cookies can be set. Otherwise, they will be ignored (there is a hack for it, but it is not a clean solution then https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie#security)
+* **Desktop**: requires Nucleus Tao (`nucleusApplication` + `decorated-window-tao`). Linux (WebKit2GTK), macOS (WKWebView) and Windows (WebView2) are fully wired.
+* **WasmJs**:
+  * Navigation back and forward is not available in the IFrame
+  * The IFrame will work only if the target website has appropriately configured its CORS
+  * JS can be executed only on the same origin
+  * Cookies can be set only for the parent destination (when the destination of the iframe is the same as the parent destination)
 
 ---
 
-
-## Credits 🙏
+## Credits
 
 * API inspiration: KevinnZou/compose-webview-multiplatform
-* Wry (Tauri ecosystem)
-* UniFFI (Mozilla)
-

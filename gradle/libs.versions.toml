@@ -1,18 +1,16 @@
 [versions]
-androidx-activity = "1.12.2"
-mavenPublish = "0.35.0"
-androidx-lifecycle = "2.9.6"
-androidGradlePlugin = "8.12.3"
-composeHotReload = "1.0.0"
-composeMultiplatform = "1.10.0-rc02"
-gobley = "0.3.7"
-google-material = "1.13.0"
-jna = "5.18.1"
-playwright = "1.49.0"
-kotlin = "2.2.21"
-kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.9.0"
-skiko = "0.9.37.3"
+androidx-activity = "1.13.0"
+mavenPublish = "0.37.0"
+# 2.11+ requires compileSdk 37 / AGP 9.x; keep 2.9.x until AGP is upgraded.
+androidx-lifecycle = "2.9.0"
+androidGradlePlugin = "8.13.2"
+composeHotReload = "1.2.0"
+composeMultiplatform = "1.11.1"
+google-material = "1.14.0"
+kotlin = "2.4.10"
+kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.11.0"
+nucleus = "2.3.1"
 
 [libraries]
 compose-ui-test = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "composeMultiplatform" }
@@ -25,9 +23,9 @@ kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-s
 kotlinx-coroutinesAndroid = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-serializationJson = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
-playwright = { module = "com.microsoft.playwright:playwright", version.ref = "playwright" }
-skiko-awt = { module = "org.jetbrains.skiko:skiko-awt", version.ref = "skiko" }
+nucleus-core-runtime = { module = "dev.nucleusframework:nucleus.core-runtime", version.ref = "nucleus" }
+nucleus-decorated-window-tao = { module = "dev.nucleusframework:nucleus.decorated-window-tao", version.ref = "nucleus" }
+nucleus-application = { module = "dev.nucleusframework:nucleus.nucleus-application", version.ref = "nucleus" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "androidGradlePlugin" }
@@ -39,7 +37,5 @@ kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", versio
 kotlinAtomicfu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
-gobleyCargo = { id = "dev.gobley.cargo", version.ref = "gobley" }
-gobleyRust = { id = "dev.gobley.rust", version.ref = "gobley" }
-gobleyUniffi = { id = "dev.gobley.uniffi", version.ref = "gobley" }
 mavenPublish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }
+nucleus = { id = "dev.nucleusframework", version.ref = "nucleus" }
