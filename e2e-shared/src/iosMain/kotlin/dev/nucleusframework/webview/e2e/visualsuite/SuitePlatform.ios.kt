@@ -4,11 +4,14 @@ import androidx.compose.runtime.Composable
 import dev.nucleusframework.webview.web.IWebView
 import dev.nucleusframework.webview.web.WebViewState
 import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSDate
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
 import platform.Foundation.writeToFile
 import platform.Foundation.NSString
 import platform.Foundation.NSUTF8StringEncoding
+// Xcode 26 cinterop: property is a top-level extension import.
+import platform.Foundation.timeIntervalSince1970
 import platform.posix.mkdir
 
 actual fun suiteCapabilities(): Set<SuiteCapability> =
@@ -52,8 +55,8 @@ actual fun writeSuiteReport(
     return path
 }
 
-// Prefer kotlin.system — NSDate.timeIntervalSince1970 is missing under Xcode 26 SDK bindings.
-actual fun currentTimeNanos(): Long = kotlin.system.getTimeNanos()
+actual fun currentTimeNanos(): Long =
+    (NSDate().timeIntervalSince1970 * 1_000_000_000.0).toLong()
 
 @OptIn(ExperimentalForeignApi::class)
 actual fun createTempProfileDirectory(prefix: String): String {

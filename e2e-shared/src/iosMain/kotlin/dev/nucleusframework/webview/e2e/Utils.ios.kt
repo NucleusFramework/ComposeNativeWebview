@@ -6,6 +6,8 @@ import platform.Foundation.NSCalendarUnitHour
 import platform.Foundation.NSCalendarUnitMinute
 import platform.Foundation.NSCalendarUnitSecond
 import platform.Foundation.NSCalendarUnitNanosecond
+// Xcode 26 cinterop exposes this as a top-level extension, not a member property.
+import platform.Foundation.timeIntervalSince1970
 
 internal actual fun nowTimestamp(): String {
     val calendar = NSCalendar.currentCalendar
@@ -29,6 +31,5 @@ internal actual fun nowTimestamp(): String {
     }
 }
 
-// Prefer kotlin.system over NSDate.timeIntervalSince1970 — the latter is not
-// exposed the same way under newer Apple SDKs (Xcode 26 / iOS 26 bindings).
-internal actual fun currentTimeMillis(): Long = kotlin.system.getTimeMillis()
+internal actual fun currentTimeMillis(): Long =
+    (NSDate().timeIntervalSince1970 * 1000.0).toLong()
