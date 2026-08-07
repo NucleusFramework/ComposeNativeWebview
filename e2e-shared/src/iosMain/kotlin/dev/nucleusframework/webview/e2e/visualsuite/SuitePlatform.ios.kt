@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import dev.nucleusframework.webview.web.IWebView
 import dev.nucleusframework.webview.web.WebViewState
 import kotlinx.cinterop.ExperimentalForeignApi
-import platform.Foundation.NSDate
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUUID
 import platform.Foundation.writeToFile
@@ -53,8 +52,8 @@ actual fun writeSuiteReport(
     return path
 }
 
-actual fun currentTimeNanos(): Long =
-    (NSDate().timeIntervalSince1970 * 1_000_000_000.0).toLong()
+// Prefer kotlin.system — NSDate.timeIntervalSince1970 is missing under Xcode 26 SDK bindings.
+actual fun currentTimeNanos(): Long = kotlin.system.getTimeNanos()
 
 @OptIn(ExperimentalForeignApi::class)
 actual fun createTempProfileDirectory(prefix: String): String {

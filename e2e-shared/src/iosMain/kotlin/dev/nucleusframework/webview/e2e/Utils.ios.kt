@@ -29,5 +29,6 @@ internal actual fun nowTimestamp(): String {
     }
 }
 
-internal actual fun currentTimeMillis(): Long =
-    (NSDate().timeIntervalSince1970 * 1000.0).toLong()
+// Prefer kotlin.system over NSDate.timeIntervalSince1970 — the latter is not
+// exposed the same way under newer Apple SDKs (Xcode 26 / iOS 26 bindings).
+internal actual fun currentTimeMillis(): Long = kotlin.system.getTimeMillis()
