@@ -22,6 +22,8 @@ jobs:
         with:
           pattern: 'natives-*'
           merge-multiple: true
+          # Artifacts are rooted at {linux,darwin,win32}-*/ (parent path stripped on upload).
+          path: webview-compose/src/jvmMain/resources/nucleus/native
 
       - name: Verify natives present
         run: |
@@ -34,7 +36,7 @@ jobs:
             "webview-compose/src/jvmMain/resources/nucleus/native/darwin-x64/libcompose_webview_macos.dylib"
           )
           for f in "${EXPECTED[@]}"; do
-            test -f "$f" || { echo "MISSING: $f" >&2; exit 1; }
+            test -f "$f" || { echo "MISSING: $f" >&2; find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true; exit 1; }
             echo "OK: $f ($(wc -c < "$f") bytes)"
           done
 

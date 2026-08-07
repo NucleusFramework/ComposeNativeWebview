@@ -40,6 +40,9 @@ jobs:
         with:
           pattern: 'natives-*'
           merge-multiple: true
+          # Artifacts are rooted at {linux,darwin,win32}-*/ — place them where the
+          # JVM resource loader and buildNative* onlyIf checks expect them.
+          path: webview-compose/src/jvmMain/resources/nucleus/native
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -157,40 +160,28 @@ jobs:
         with:
           api-level: 30
           arch: x86_64
-          script: |
-            ./gradlew :e2e-android:installDebug --no-configuration-cache
-            adb logcat -c
-            adb uninstall dev.nucleusframework.webview.e2e >/dev/null 2>&1 || true
-            ./gradlew :e2e-android:installDebug --no-configuration-cache
-            adb logcat -c
-            adb shell am start -a android.intent.action.MAIN \
-              -c android.intent.category.LAUNCHER \
-              -n dev.nucleusframework.webview.e2e/.MainActivity
-            # Wait for suite log line (max ~12 min)
-            for i in $(seq 1 360); do
-              if adb logcat -d | grep -q 'SUITE_FINISHED'; then
-                adb logcat -d | grep -E 'SUITE_FINISHED|allGreen' | tail -10
-                if adb logcat -d | grep -q 'SUITE_FINISHED passed=true'; then
-                  echo "Android visual e2e PASSED"
-                  exit 0
-                else
-                  echo "Android visual e2e FAILED" >&2
-                  adb logcat -d | grep 'ComposeWebViewE2E' | tail -120
-                  exit 1
-                fi
-              fi
-              sleep 2
-            done
-            echo "Timed out waiting for SUITE_FINISHED" >&2
-            adb logcat -d | grep -E 'ComposeWebViewE2E|AndroidRuntime' | tail -120
-            exit 1
+          # android-emulator-runner executes the script line-by-line via `sh -c`,
+          # so multi-line shell (backslash continuations, for-loops) must live in
+          # a single script file.
+          script: bash e2e-android/ci-run-suite.sh
 
   # ── Same commonTest suite on iOS simulator ────────────────────────────────
   common-tests-ios:
-    runs-on: macos-14
+    # Compose Multiplatform 1.11 needs Xcode 16+ (UIViewLayoutRegion / UIUtilities).
+    runs-on: macos-15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Select Xcode 16+
+        run: |
+          # Prefer latest Xcode 16.x available on the image; fall back to default.
+          XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$XCODE" ]; then
+            echo "Using $XCODE"
+            sudo xcode-select -s "$XCODE"
+          fi
+          xcodebuild -version
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -223,11 +214,12 @@ jobs:
         with:
           pattern: 'natives-*'
           merge-multiple: true
+          path: webview-compose/src/jvmMain/resources/nucleus/native
 
       - name: Verify Linux natives present
         run: |
           f="webview-compose/src/jvmMain/resources/nucleus/native/linux-x64/libcompose_webview_linux.so"
-          test -f "$f" || { echo "MISSING: $f" >&2; exit 1; }
+          test -f "$f" || { echo "MISSING: $f" >&2; find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true; exit 1; }
           echo "OK: $f ($(wc -c < "$f") bytes)"
 
       - name: Set up JDK
@@ -271,13 +263,14 @@ jobs:
         with:
           pattern: 'natives-*'
           merge-multiple: true
+          path: webview-compose/src/jvmMain/resources/nucleus/native
 
       - name: Verify Windows natives present
         shell: bash
         run: |
           f="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/compose_webview_windows.dll"
           loader="webview-compose/src/jvmMain/resources/nucleus/native/win32-x64/WebView2Loader.dll"
-          test -f "$f" && test -f "$loader" || { echo "MISSING natives" >&2; exit 1; }
+          test -f "$f" && test -f "$loader" || { echo "MISSING natives" >&2; find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true; exit 1; }
           echo "OK: $f / $loader"
 
       - name: Set up JDK
@@ -307,6 +300,7 @@ jobs:
         with:
           pattern: 'natives-*'
           merge-multiple: true
+          path: webview-compose/src/jvmMain/resources/nucleus/native
 
       - name: Verify macOS natives present
         run: |
@@ -320,7 +314,10 @@ jobs:
               MISSING=1
             fi
           done
-          if [ "$MISSING" = "1" ]; then exit 1; fi
+          if [ "$MISSING" = "1" ]; then
+            find webview-compose/src/jvmMain/resources/nucleus/native -type f 2>/dev/null || true
+            exit 1
+          fi
 
       - name: Set up JDK
         uses: actions/setup-java@v4
