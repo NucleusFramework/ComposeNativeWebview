@@ -1,16 +1,15 @@
 name: Publish to Maven Central
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
 
 jobs:
   build-natives:
-    if: startsWith(github.event.release.tag_name, 'v')
     uses: ./.github/workflows/build-natives.yaml
 
   publish:
-    if: startsWith(github.event.release.tag_name, 'v')
     needs: build-natives
     runs-on: ubuntu-latest
     steps:
@@ -43,7 +42,7 @@ jobs:
       - name: Set version from tag
         shell: bash
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${GITHUB_REF_NAME}"
           VERSION_NAME="${TAG#v}"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           sed -i.bak "s/^VERSION_NAME=.*/VERSION_NAME=$VERSION_NAME/" gradle.properties
