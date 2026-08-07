@@ -39,13 +39,22 @@ fun rememberWebViewState(
     url: String,
     additionalHttpHeaders: Map<String, String> = emptyMap(),
     extraSettings: WebSettings.() -> Unit = {},
-): WebViewState =
-    remember {
-        WebViewState(WebContent.Url(url, additionalHttpHeaders))
-    }.apply {
-        this.content = WebContent.Url(url, additionalHttpHeaders)
-        extraSettings(this.webSettings)
+): WebViewState {
+    val state =
+        remember {
+            WebViewState(WebContent.Url(url, additionalHttpHeaders))
+        }
+    // Sync only when caller inputs change. Assigning on every recomposition (the old
+    // `.apply { content = … }` pattern) clobbers programmatic `state.content` updates
+    // (e.g. visual suite C09) as soon as loadingState triggers a parent recompose.
+    LaunchedEffect(url, additionalHttpHeaders) {
+        state.content = WebContent.Url(url, additionalHttpHeaders)
     }
+    SideEffect {
+        extraSettings(state.webSettings)
+    }
+    return state
+}
 
 @Composable
 fun rememberWebViewStateWithHTMLData(
@@ -54,20 +63,28 @@ fun rememberWebViewStateWithHTMLData(
     encoding: String = "utf-8",
     mimeType: String? = null,
     historyUrl: String? = null,
-): WebViewState =
-    remember {
-        WebViewState(WebContent.Data(data, baseUrl, encoding, mimeType, historyUrl))
-    }.apply {
-        this.content = WebContent.Data(data, baseUrl, encoding, mimeType, historyUrl)
+): WebViewState {
+    val state =
+        remember {
+            WebViewState(WebContent.Data(data, baseUrl, encoding, mimeType, historyUrl))
+        }
+    LaunchedEffect(data, baseUrl, encoding, mimeType, historyUrl) {
+        state.content = WebContent.Data(data, baseUrl, encoding, mimeType, historyUrl)
     }
+    return state
+}
 
 @Composable
 fun rememberWebViewStateWithHTMLFile(
     fileName: String,
     readType: WebViewFileReadType,
-): WebViewState =
-    remember {
-        WebViewState(WebContent.File(fileName, readType))
-    }.apply {
-        this.content = WebContent.File(fileName, readType)
+): WebViewState {
+    val state =
+        remember {
+            WebViewState(WebContent.File(fileName, readType))
+        }
+    LaunchedEffect(fileName, readType) {
+        state.content = WebContent.File(fileName, readType)
     }
+    return state
+}

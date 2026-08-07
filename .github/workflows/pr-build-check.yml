@@ -173,15 +173,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16+
+      - name: Select Xcode 26+ (Compose 1.11 needs iOS 26 SDK)
         run: |
-          # Prefer latest Xcode 16.x available on the image; fall back to default.
-          XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)
+          # CMP 1.11 links UIViewLayoutRegion / UIUtilities from the iOS 26 SDK.
+          # Prefer newest Xcode 26.x on the image; fall back to 16.x only as last resort.
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$XCODE" ]; then
+            XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)
+          fi
           if [ -n "$XCODE" ]; then
             echo "Using $XCODE"
             sudo xcode-select -s "$XCODE"
           fi
           xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version || true
 
       - name: Set up JDK
         uses: actions/setup-java@v4
