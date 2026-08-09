@@ -30,10 +30,28 @@ jobs:
 
   publish:
     needs: build-natives
-    runs-on: ubuntu-latest
+    # MUST stay on macOS: iosArm64 / iosSimulatorArm64 are disabled on any other
+    # host, and Kotlin then writes the root module metadata with Gradle-default
+    # coordinates for them (`composewebview:webview-compose-iosarm64:unspecified`),
+    # which makes the release unresolvable for iOS consumers (issue #51).
+    # :webview-compose:verifyPublicationCoordinates guards against a regression.
+    runs-on: macos-15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Select Xcode 26+ (Compose 1.11 needs iOS 26 SDK)
+        run: |
+          # Same selection as the iOS jobs in pr-build-check.yml.
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$XCODE" ]; then
+            XCODE=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1 || true)
+          fi
+          if [ -n "$XCODE" ]; then
+            echo "Using $XCODE"
+            sudo xcode-select -s "$XCODE"
+          fi
+          xcodebuild -version
 
       - name: Download native artifacts
         uses: actions/download-artifact@v4
