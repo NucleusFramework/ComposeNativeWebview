@@ -97,8 +97,16 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # SONATYPE_CONNECT_TIMEOUT_SECONDS defaults to 60s, which is the OkHttp
+      # read timeout on the bundle upload. The Central Portal regularly takes
+      # longer to answer, and a timed-out upload still leaves a live deployment
+      # behind — so the retry then fails with "currently being published in
+      # another deployment" and the release needs manual cleanup.
       - name: Publish to Maven Central
-        run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache
+        run: >
+          ./gradlew publishAndReleaseToMavenCentral
+          -PSONATYPE_CONNECT_TIMEOUT_SECONDS=600
+          --no-configuration-cache
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVENCENTRALUSERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVENCENTRALPASSWORD }}
