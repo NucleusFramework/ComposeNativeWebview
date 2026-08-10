@@ -1,6 +1,7 @@
 @file:OptIn(ExperimentalWasmDsl::class)
 
 import com.vanniktech.maven.publish.KotlinMultiplatform
+import groovy.json.JsonSlurper
 import org.apache.tools.ant.taskdefs.condition.Os
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
@@ -207,4 +208,56 @@ mavenPublishing {
         name.set("ComposeWebView")
         description.set("Compose Multiplatform WebView library for Desktop, Android and iOS")
     }
+}
+
+// The root KMP module metadata redirects every target variant to a sibling module
+// through an `available-at` entry. Targets that are disabled on the publishing host
+// (Apple targets anywhere but macOS) keep Gradle's default project coordinates, so
+// the release ships pointing at `composewebview:webview-compose-iosarm64:unspecified`
+// and no iOS consumer can resolve it (issue #51). Fail the publish instead.
+val verifyPublicationCoordinates by tasks.registering {
+    description = "Checks that the KMP root module metadata only points at modules being published"
+    group = "verification"
+
+    val metadataFile = tasks.named<GenerateModuleMetadata>(
+        "generateMetadataFileForKotlinMultiplatformPublication"
+    ).flatMap { it.outputFile }
+
+    inputs.file(metadataFile)
+
+    doLast {
+        @Suppress("UNCHECKED_CAST")
+        val root = JsonSlurper().parse(metadataFile.get().asFile) as Map<String, Any>
+
+        @Suppress("UNCHECKED_CAST")
+        val component = root["component"] as Map<String, Any>
+        val group = component["group"]
+        val version = component["version"]
+
+        @Suppress("UNCHECKED_CAST")
+        val variants = root["variants"] as? List<Map<String, Any>> ?: emptyList()
+        val dangling = variants.mapNotNull { variant ->
+            @Suppress("UNCHECKED_CAST")
+            val at = variant["available-at"] as? Map<String, Any> ?: return@mapNotNull null
+            if (at["group"] == group && at["version"] == version) return@mapNotNull null
+            "${variant["name"]} -> ${at["group"]}:${at["module"]}:${at["version"]}"
+        }
+
+        check(dangling.isEmpty()) {
+            buildString {
+                appendLine("Root module metadata points at modules outside this publication:")
+                dangling.forEach { appendLine("  $it") }
+                appendLine("Expected $group:*:$version.")
+                append(
+                    "Publish from a host that can build every declared target " +
+                        "(macOS is required for the iOS targets)."
+                )
+            }
+        }
+        logger.lifecycle("Publication coordinates OK: ${variants.size} variants under $group:*:$version")
+    }
+}
+
+tasks.withType<AbstractPublishToMaven>().configureEach {
+    dependsOn(verifyPublicationCoordinates)
 }
