@@ -98,6 +98,22 @@ Reference measurement (macOS, M4, 90 Hz display, Nucleus Tao 2.5.5, `rAF` + WebG
 | Canvas 2D animation | 90 fps | 90 fps |
 | WebGL, GPU-bound shader | 31–34 fps | 32–35 fps |
 
+Blending an overlay on top does not change that. Same page, full-screen window
+(2560×1040), with an animated Compose overlay in the `content` slot — page fps /
+Compose fps, plus GPU utilization sampled while both run at the display rate:
+
+| Compose overlay | Light page | GPU-bound page | GPU util (light page) |
+|-----------------|-----------|----------------|-----------------------|
+| none | 90 / 90 | 34 / 90 | 23.4 % |
+| 64 dp animated bar | 90 / 90 | 34 / 90 | — |
+| full-window translucent scrim | 90 / 90 | 34 / 90 | 22.9 % |
+| full-window opaque surface | 90 / 90 | 34 / 90 | — |
+| *bare `WKWebView`, opaque window* | *90* | *34* | *27.6 %* |
+
+Note that an **opaque** Compose overlay does not stop the WebView underneath: it
+keeps rendering at full speed behind it, so hide or dispose it instead of covering
+it if you want the GPU work back.
+
 When reporting a frame-rate problem, include the `R01`/`R02` values, the display refresh
 rate, and whether Compose content overlaps the WebView.
 
