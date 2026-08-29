@@ -48,6 +48,65 @@ internal fun pageSolidColor(hex: String): String =
     </head><body></body></html>
     """.trimIndent()
 
+/**
+ * Animates a box on every `requestAnimationFrame` and publishes the frame rate
+ * of the last full second in `window.__fps` (0 until the first second elapsed).
+ * The transform keeps real compositing work in the loop, so a throttled
+ * compositor shows up in the number instead of a free-running empty callback.
+ */
+internal fun pageFrameRate(): String =
+    """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>FrameRate</title>
+    <style>html,body{margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui}
+    #marker{padding:12px;font-weight:700}#box{width:72px;height:72px;background:#34d399}</style>
+    </head><body><div id="marker">raf-probe</div><div id="box"></div>
+    <script>
+      window.__fps = 0;
+      var frames = 0, last = performance.now(), box = document.getElementById('box');
+      function loop(t) {
+        frames++;
+        box.style.transform = 'translateX(' + ((t / 6) % 240) + 'px)';
+        if (t - last >= 1000) {
+          window.__fps = Math.round(frames * 1000 / (t - last));
+          frames = 0;
+          last = t;
+        }
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    </script></body></html>
+    """.trimIndent()
+
+/**
+ * Creates a WebGL context and publishes its renderer in `window.__glRenderer`
+ * ("unavailable" when the host has no WebGL). A software renderer here explains
+ * slow WebGL content far better than any frame-rate number.
+ */
+internal fun pageWebGl(): String =
+    """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>WebGL</title>
+    <style>html,body{margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui}
+    #marker{padding:12px;font-weight:700}</style>
+    </head><body><div id="marker">webgl-probe</div><canvas id="gl" width="64" height="64"></canvas>
+    <script>
+      window.__glRenderer = 'unavailable';
+      try {
+        var c = document.getElementById('gl');
+        var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+        if (gl) {
+          gl.clearColor(0.1, 0.6, 0.4, 1.0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          window.__glRenderer =
+            (dbg && gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) ||
+            gl.getParameter(gl.RENDERER) || 'webgl';
+        }
+      } catch (e) {
+        window.__glRenderer = 'error: ' + e;
+      }
+    </script></body></html>
+    """.trimIndent()
+
 internal fun pageWithInitProbe(): String =
     """
     <!DOCTYPE html><html><head><meta charset="utf-8"><title>InitProbe</title></head>

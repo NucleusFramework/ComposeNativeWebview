@@ -33,6 +33,20 @@ internal suspend fun runFullSuite(
         runCase(onStatus = { s, d -> onCase(id, s, d) }) { block() }
     }
 
+    /** Case whose reported detail is the measurement it returns. */
+    suspend fun measured(
+        id: String,
+        required: Set<SuiteCapability> = emptySet(),
+        block: suspend () -> String,
+    ) {
+        val missing = required - caps
+        if (missing.isNotEmpty()) {
+            onCase(id, CaseStatus.Skipped, "unsupported: ${missing.joinToString(",")}")
+            return
+        }
+        runMeasuredCase(onStatus = { s, d -> onCase(id, s, d) }) { block() }
+    }
+
     waitWebView(ctx.state)
     delay(300)
 
@@ -676,4 +690,38 @@ internal suspend fun runFullSuite(
         val r = evalJs(ctx.navigator, "1+1")
         assertThat(r.contains("2"), "API dead after headers path: $r")
     }
+
+    // ── Rendering ────────────────────────────────────────────────────
+    // The WebView is a real native view (no offscreen rendering, no frame
+    // pacing in this library), so these publish what the host reaches — a
+    // healthy value is the display refresh rate. They only fail when the
+    // page is not animating at all.
+    measured("R01") {
+        loadHtmlAwaitMarker(ctx.navigator, "raf-probe", pageFrameRate())
+        // First second primes window.__fps, the second one is the sample.
+        delay(2_200)
+        // Every engine suspends requestAnimationFrame for a hidden document —
+        // a window covered by another one measures 0 fps and says nothing about
+        // the backend, so skip instead of failing (CI runs windows unattended).
+        val visibility = evalJsUnquoted(ctx.navigator, "document.visibilityState")
+        if (visibility != "visible") {
+            skipCase("document is $visibility (window occluded/backgrounded)")
+        }
+        val fps = evalJsUnquoted(ctx.navigator, "String(window.__fps || 0)").toIntOrNull() ?: 0
+        assertThat(fps >= MIN_ANIMATING_FPS, "requestAnimationFrame stalled at $fps fps")
+        "$fps fps"
+    }
+    measured("R02") {
+        loadHtmlAwaitMarker(ctx.navigator, "webgl-probe", pageWebGl())
+        val renderer = evalJsUnquoted(ctx.navigator, "String(window.__glRenderer || '')")
+        assertThat(renderer.isNotBlank(), "WebGL probe did not run")
+        renderer
+    }
 }
+
+/**
+ * Floor for "the page is animating at all". Deliberately far below any real
+ * display rate: R01 reports a measurement, it does not police host performance
+ * (CI runners render in software).
+ */
+private const val MIN_ANIMATING_FPS = 10

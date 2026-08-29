@@ -102,6 +102,33 @@ internal suspend fun <T> runCase(
     }
 }
 
+/** Thrown by a case that cannot be measured on this host right now. */
+internal class SuiteSkip(
+    message: String,
+) : Exception(message)
+
+internal fun skipCase(reason: String): Nothing = throw SuiteSkip(reason)
+
+/**
+ * Like [runCase], but the block returns the measurement to publish as the case
+ * detail (reported instead of the default "ok") — for cases whose value is the
+ * number they produce, not a pass/fail threshold. A [SuiteSkip] marks the case
+ * Skipped instead of Failed.
+ */
+internal suspend fun runMeasuredCase(
+    onStatus: (CaseStatus, String) -> Unit,
+    block: suspend () -> String,
+) {
+    onStatus(CaseStatus.Running, "")
+    try {
+        onStatus(CaseStatus.Passed, block())
+    } catch (skip: SuiteSkip) {
+        onStatus(CaseStatus.Skipped, skip.message ?: "not measurable")
+    } catch (t: Throwable) {
+        onStatus(CaseStatus.Failed, t.message ?: t::class.simpleName ?: "error")
+    }
+}
+
 internal suspend fun softTimeout(
     timeoutMs: Long,
     block: suspend () -> Unit,

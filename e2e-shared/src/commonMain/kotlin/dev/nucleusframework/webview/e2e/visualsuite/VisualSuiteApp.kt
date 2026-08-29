@@ -200,7 +200,7 @@ fun VisualSuiteApp(
                 summary =
                     when (status) {
                         CaseStatus.Running -> "Running $id…"
-                        CaseStatus.Passed -> "$id PASS"
+                        CaseStatus.Passed -> if (detail == "ok") "$id PASS" else "$id PASS: $detail"
                         CaseStatus.Failed -> "$id FAIL: $detail"
                         CaseStatus.Skipped -> "$id SKIP: $detail"
                         else -> summary
@@ -341,7 +341,11 @@ fun VisualSuiteApp(
                                 fontSize = 11.sp,
                                 maxLines = 1,
                             )
-                            if (c.detail.isNotBlank() && c.status != CaseStatus.Passed) {
+                            // "ok" is the default pass detail — measurements
+                            // (R01/R02) carry their value there and stay visible.
+                            if (c.detail.isNotBlank() &&
+                                (c.status != CaseStatus.Passed || c.detail != "ok")
+                            ) {
                                 Text(
                                     c.detail.take(140),
                                     color = statusColor(c.status),
