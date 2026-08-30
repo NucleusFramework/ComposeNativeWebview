@@ -53,6 +53,72 @@ If you already know **compose-webview-multiplatform**, you already know how to u
 
 ---
 
+## Rendering model & frame rate
+
+The desktop backend embeds a **real native view** — it does **not** render the page
+offscreen into a bitmap and blit it into the Compose scene:
+
+- **macOS**: the `WKWebView` `NSView` is a subview of the Tao window, below the Compose
+  Metal layer; Compose punches a transparent hole over the WebView rect.
+- **Linux**: the WebKit2GTK widget is reparented into Tao's content widget.
+- **Windows**: WebView2 runs as a DirectComposition visual composited by DWM.
+
+Consequences:
+
+- There is **no frame pacing, throttling or `max_fps` knob** in this library — none of
+  the backends contain frame-rate logic. The page paints at whatever rate the platform
+  compositor gives it, which is normally the **display refresh rate**.
+- The WebView's own frames do not go through Compose. Compose renders its overlay in
+  the same window, so a heavy Compose UI shares the GPU with the page, but it never
+  gates the WebView's frames.
+
+### Measure it on your hardware
+
+`./gradlew :e2e-desktop:run` reports two rendering measurements (they publish numbers,
+they do not enforce thresholds):
+
+```text
+Passed  R01  Rendering  requestAnimationFrame rate   90 fps
+Passed  R02  Rendering  WebGL renderer               Apple GPU
+```
+
+A healthy `R01` is the refresh rate of the display the window is on, and `R02` should
+name a GPU (a software renderer there is the usual reason WebGL content is slow).
+
+`R01` is **Skipped** when the document reports `visibilityState = "hidden"`: every engine
+suspends `requestAnimationFrame` for a window that is fully covered or backgrounded, so
+the sample would read 0 fps and say nothing about the backend. A bare `WKWebView` in a
+plain `NSWindow` behaves exactly the same — keep the window in front while measuring.
+
+Reference measurement (macOS, M4, 90 Hz display, Nucleus Tao 2.5.5, `rAF` + WebGL page)
+— embedded WebView vs. the same page in a bare `WKWebView` in a plain `NSWindow`:
+
+| Workload | Embedded (Tao `NativeView`) | Bare `WKWebView` |
+|----------|-----------------------------|------------------|
+| Canvas 2D animation | 90 fps | 90 fps |
+| WebGL, GPU-bound shader | 31–34 fps | 32–35 fps |
+
+Blending an overlay on top does not change that. Same page, full-screen window
+(2560×1040), with an animated Compose overlay in the `content` slot — page fps /
+Compose fps, plus GPU utilization sampled while both run at the display rate:
+
+| Compose overlay | Light page | GPU-bound page | GPU util (light page) |
+|-----------------|-----------|----------------|-----------------------|
+| none | 90 / 90 | 34 / 90 | 23.4 % |
+| 64 dp animated bar | 90 / 90 | 34 / 90 | — |
+| full-window translucent scrim | 90 / 90 | 34 / 90 | 22.9 % |
+| full-window opaque surface | 90 / 90 | 34 / 90 | — |
+| *bare `WKWebView`, opaque window* | *90* | *34* | *27.6 %* |
+
+Note that an **opaque** Compose overlay does not stop the WebView underneath: it
+keeps rendering at full speed behind it, so hide or dispose it instead of covering
+it if you want the GPU work back.
+
+When reporting a frame-rate problem, include the `R01`/`R02` values, the display refresh
+rate, and whether Compose content overlaps the WebView.
+
+---
+
 ## Quick start
 
 ```kotlin
