@@ -357,6 +357,32 @@ internal suspend fun runFullSuite(
         }
     }
 
+    case("B10", required = setOf(SuiteCapability.DocumentStartJsBridge)) {
+        // Bridge must answer a call made while the document is still parsing.
+        ctx.clearBridgeHits()
+        loadHtmlAwaitMarker(ctx.navigator, "early-b10", pageEarlyBridgeCall("early-b10"))
+        assertThat(
+            evalJs(ctx.navigator, "window.__earlyBridge === true").contains("true"),
+            "bridge absent while the document was parsing",
+        )
+        awaitUntil(12_000, "early ping") {
+            ctx.getLastPingPayload()?.contains("early-b10") == true
+        }
+    }
+    case("B11", required = setOf(SuiteCapability.DocumentStartJsBridge)) {
+        // Without a baseUrl the document URL stays about:blank, so neither the
+        // polled loadingState nor lastLoadedUrl need to change between loads:
+        // only a document-start bridge survives every navigation.
+        repeat(3) { i ->
+            val tag = "same-url-$i"
+            ctx.clearBridgeHits()
+            ctx.navigator.loadHtml(pageEarlyBridgeCall(tag), baseUrl = null)
+            awaitUntil(12_000, "early ping $tag") {
+                ctx.getLastPingPayload()?.contains(tag) == true
+            }
+        }
+    }
+
     // ── Cookies ──────────────────────────────────────────────────────
     case("K01", required = setOf(SuiteCapability.CookieDomainApi)) {
         val url = "https://suite.local/"

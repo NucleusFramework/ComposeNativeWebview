@@ -49,6 +49,8 @@ internal fun suiteCatalog(): List<SuiteCase> =
         SuiteCase("B07", "JS Bridge", "second handler registration works"),
         SuiteCase("B08", "JS Bridge", "unregister stops dispatch"),
         SuiteCase("B09", "JS Bridge", "rapid IPC burst (×12) drains without drop"),
+        SuiteCase("B10", "JS Bridge", "bridge callable from an inline script (document start)"),
+        SuiteCase("B11", "JS Bridge", "bridge survives loads that keep the same URL (×3)"),
         // Cookies (Wry: set/get/clear_for_url/clear_all + attributes)
         SuiteCase("K01", "Cookies", "setCookie + getCookies finds cookie"),
         SuiteCase("K02", "Cookies", "removeCookies drops cookie"),

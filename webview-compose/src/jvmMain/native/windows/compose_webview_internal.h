@@ -69,6 +69,7 @@ struct ComposeWebViewCreateOptions {
     std::wstring userAgent;
     std::wstring dataDirectory;
     std::wstring initScript;
+    std::wstring jsBridgeScript;
     bool incognito = false;
     bool enableDevtools = false;
     bool javascriptEnabled = true;

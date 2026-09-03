@@ -1,6 +1,7 @@
 package dev.nucleusframework.webview.web
 
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
+import dev.nucleusframework.webview.jsbridge.jsBridgeObjectScript
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -88,36 +89,10 @@ interface IWebView {
 
     fun injectJsBridge() {
         val bridge = webViewJsBridge ?: return
-        val name = bridge.jsBridgeName
-        val initJs =
-            """
-            if (typeof window.$name === 'undefined') {
-                window.$name = {
-                    callbacks: {},
-                    callbackId: 0,
-                    callNative: function (methodName, params, callback) {
-                        var message = {
-                            methodName: methodName,
-                            params: params,
-                            callbackId: callback ? window.$name.callbackId++ : -1
-                        };
-                        if (callback) {
-                            window.$name.callbacks[message.callbackId] = callback;
-                        }
-                        window.$name.postMessage(JSON.stringify(message));
-                    },
-                    onCallback: function (callbackId, data) {
-                        var callback = window.$name.callbacks[callbackId];
-                        if (callback) {
-                            callback(data);
-                            delete window.$name.callbacks[callbackId];
-                        }
-                    },
-                    postMessage: function(_) { /* platform override */ }
-                };
-            }
-            """.trimIndent()
-        evaluateJavaScript(initJs)
+        // Transport is attached by the platform override right after this call.
+        evaluateJavaScript(
+            jsBridgeObjectScript(bridge.jsBridgeName, "/* platform override */"),
+        )
     }
 
     fun initJsBridge(webViewJsBridge: WebViewJsBridge)
