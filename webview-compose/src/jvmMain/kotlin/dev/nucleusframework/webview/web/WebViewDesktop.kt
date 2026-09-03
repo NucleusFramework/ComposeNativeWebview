@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import dev.nucleusframework.core.runtime.Platform
 import dev.nucleusframework.webview.cookie.DesktopCookieManager
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
+import dev.nucleusframework.webview.jsbridge.jsBridgeObjectScript
 import dev.nucleusframework.webview.jsbridge.parseJsMessage
 import dev.nucleusframework.webview.request.WebRequest
 import dev.nucleusframework.webview.request.WebRequestInterceptResult
@@ -36,7 +37,29 @@ actual class WebViewFactoryParam(
     val fileContent: String = "",
     /** Windows only: parent Tao HWND. Required to create a real WebView2. */
     val parentHwnd: Long = 0L,
+    /**
+     * Name of the JS bridge object to install at document start, or null when
+     * the WebView is used without a [WebViewJsBridge].
+     */
+    val jsBridgeName: String? = null,
 )
+
+/**
+ * JS bridge bootstrap injected natively at document start.
+ *
+ * Desktop [LoadingState] is derived from a poller, so post-load injection can
+ * miss a navigation that starts and finishes inside one tick (in-memory HTML,
+ * `data:` URLs, cached pages) or that keeps the same URL. Installing the
+ * object as a native user script makes it available to page scripts from the
+ * first statement of every document, on every backend.
+ */
+private fun desktopJsBridgeScript(jsBridgeName: String?): String? {
+    val name = jsBridgeName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return jsBridgeObjectScript(
+        name = name,
+        postMessageBody = "if (window.ipc && window.ipc.postMessage) window.ipc.postMessage(message);",
+    )
+}
 
 /**
  * Default factory: real WebKit2GTK on Linux, WKWebView on macOS, WebView2 on
@@ -45,6 +68,7 @@ actual class WebViewFactoryParam(
 actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
     val settings = param.state.webSettings
     val desktop = settings.desktopWebSettings
+    val bridgeScript = desktopJsBridgeScript(param.jsBridgeName)
     val background =
         if (desktop.transparent) {
             settings.backgroundColor
@@ -58,6 +82,7 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
             customUserAgent = settings.customUserAgentString,
             dataDirectory = desktop.dataDirectory,
             initScript = desktop.initScript,
+            jsBridgeScript = bridgeScript,
             incognito = desktop.incognito,
             enableDevtools = desktop.enableDevtools,
             javascriptEnabled = settings.isJavaScriptEnabled,
@@ -72,6 +97,7 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
             customUserAgent = settings.customUserAgentString,
             dataDirectory = desktop.dataDirectory,
             initScript = desktop.initScript,
+            jsBridgeScript = bridgeScript,
             incognito = desktop.incognito,
             enableDevtools = desktop.enableDevtools,
             javascriptEnabled = settings.isJavaScriptEnabled,
@@ -91,6 +117,7 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
             customUserAgent = settings.customUserAgentString,
             dataDirectory = desktop.dataDirectory,
             initScript = desktop.initScript,
+            jsBridgeScript = bridgeScript,
             incognito = desktop.incognito,
             enableDevtools = desktop.enableDevtools,
             javascriptEnabled = settings.isJavaScriptEnabled,
@@ -140,7 +167,11 @@ actual fun ActualWebView(
             0L
         }
 
-    val nativeWebView = remember(state, factory, parentHwnd) {
+    // Keyed by name (not identity) so a remembered bridge never recreates the
+    // WebView, while a late-arriving bridge still gets its document-start script.
+    val jsBridgeName = webViewJsBridge?.jsBridgeName
+
+    val nativeWebView = remember(state, factory, parentHwnd, jsBridgeName) {
         // Prefer a ready live backend across recompositions. Windows may
         // first compose with parentHwnd=0 (no-op) then recreate once the
         // Tao HWND is available — do not lock in a permanent no-op.
@@ -148,7 +179,13 @@ actual fun ActualWebView(
         if (existing != null && existing.isReady() && existing.isLiveBackend()) {
             existing
         } else {
-            factory(WebViewFactoryParam(state, parentHwnd = parentHwnd))
+            factory(
+                WebViewFactoryParam(
+                    state,
+                    parentHwnd = parentHwnd,
+                    jsBridgeName = jsBridgeName,
+                ),
+            )
         }
     }
 

@@ -16,6 +16,8 @@ class LinuxWebKitNativeWebView(
     customUserAgent: String? = null,
     dataDirectory: String? = null,
     initScript: String? = null,
+    /** JS bridge bootstrap injected at document start in all frames. */
+    jsBridgeScript: String? = null,
     incognito: Boolean = false,
     enableDevtools: Boolean = false,
     javascriptEnabled: Boolean = true,
@@ -49,6 +51,7 @@ class LinuxWebKitNativeWebView(
             userAgent = customUserAgent?.trim()?.takeIf { it.isNotEmpty() },
             dataDirectory = dataDirectory?.trim()?.takeIf { it.isNotEmpty() },
             initScript = initScript?.trim()?.takeIf { it.isNotEmpty() },
+            jsBridgeScript = jsBridgeScript?.trim()?.takeIf { it.isNotEmpty() },
             incognito = incognito,
             enableDevtools = enableDevtools,
             javascriptEnabled = javascriptEnabled,

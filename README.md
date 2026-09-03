@@ -222,9 +222,12 @@ navigator.evaluateJavaScript("document.title = 'Hello'")
 
 ### JS ↔ Kotlin bridge
 
-* injected automatically after page load
+* injected automatically — at **document start** on Desktop (available to your
+  page's own startup scripts), after page load on Android / iOS / WasmJs
 * callback-based
-* works on Android / iOS / WasmJs / Desktop (Linux WebKit)
+* works on **all platforms**: Android, iOS, WasmJs and Desktop
+  (Linux WebKit2GTK, macOS WKWebView, Windows WebView2)
+* honours a custom name: `WebViewJsBridge(jsBridgeName = "myBridge")`
 
 ```js
 window.kmpJsBridge.callNative("echo", {...}, callback)

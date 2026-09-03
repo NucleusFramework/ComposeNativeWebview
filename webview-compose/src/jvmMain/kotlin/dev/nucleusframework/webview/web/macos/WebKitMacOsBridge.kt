@@ -109,6 +109,7 @@ internal object WebKitMacOsBridge {
         userAgent: String?,
         dataDirectory: String?,
         initScript: String?,
+        jsBridgeScript: String?,
         incognito: Boolean,
         enableDevtools: Boolean,
         javascriptEnabled: Boolean,

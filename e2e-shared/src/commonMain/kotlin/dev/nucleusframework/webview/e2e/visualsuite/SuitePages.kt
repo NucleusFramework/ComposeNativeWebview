@@ -41,6 +41,38 @@ internal fun pageWithMarker(marker: String, title: String = "SUITE"): String =
     </body></html>
     """.trimIndent()
 
+/**
+ * Calls the JS bridge from an inline script, i.e. while the document is still
+ * parsing, and records in `window.__earlyBridge` whether the bridge was there.
+ *
+ * Only a bridge installed at document start can serve that call — the
+ * post-load injection driven by Compose runs far too late.
+ */
+internal fun pageEarlyBridgeCall(tag: String): String =
+    """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>EarlyBridge</title>
+    <style>html,body{margin:0;background:#ffffff;color:#111;font-family:system-ui}
+    #marker{padding:16px;font-size:18px;font-weight:700}</style>
+    </head><body><div id="marker">$tag</div>
+    <script>
+      window.__suiteLastCallback=null;
+      window.__suiteOnCallback=function(d){
+        window.__suiteLastCallback=(typeof d==='string')?d:JSON.stringify(d);
+      };
+      window.__earlyBridge =
+        typeof window.kmpJsBridge !== 'undefined' &&
+        typeof window.kmpJsBridge.callNative === 'function';
+      if (window.__earlyBridge) {
+        window.kmpJsBridge.callNative(
+          'suitePing',
+          JSON.stringify({early:'$tag'}),
+          function(d){ window.__suiteOnCallback(d); }
+        );
+      }
+    </script>
+    </body></html>
+    """.trimIndent()
+
 internal fun pageSolidColor(hex: String): String =
     """
     <!DOCTYPE html><html><head><meta charset="utf-8"><title>Color</title>

@@ -320,9 +320,8 @@ ComposeWebViewState *compose_webview_create(
     compose_webview_apply_bounds(*s);
     s->dcompDevice->Commit();
 
-    /* ipc shim + kmpJsBridge at document start so the suite does not depend
-     * on a Compose Finished race to inject the bridge after each navigation. */
-    const wchar_t *ipcAndBridgeShim =
+    /* window.ipc transport shim (WebView2 flavour). */
+    const wchar_t *ipcShim =
         L"(function(){"
         L"  if (typeof window.ipc === 'undefined') {"
         L"    window.ipc = {"
@@ -337,32 +336,16 @@ ComposeWebViewState *compose_webview_create(
         L"      }"
         L"    };"
         L"  }"
-        L"  if (typeof window.kmpJsBridge === 'undefined') {"
-        L"    window.kmpJsBridge = {"
-        L"      callbacks: {},"
-        L"      callbackId: 0,"
-        L"      callNative: function(methodName, params, callback) {"
-        L"        var message = {"
-        L"          methodName: methodName,"
-        L"          params: params,"
-        L"          callbackId: callback ? window.kmpJsBridge.callbackId++ : -1"
-        L"        };"
-        L"        if (callback) {"
-        L"          window.kmpJsBridge.callbacks[message.callbackId] = callback;"
-        L"        }"
-        L"        window.kmpJsBridge.postMessage(JSON.stringify(message));"
-        L"      },"
-        L"      onCallback: function(callbackId, data) {"
-        L"        var cb = window.kmpJsBridge.callbacks[callbackId];"
-        L"        if (cb) { cb(data); delete window.kmpJsBridge.callbacks[callbackId]; }"
-        L"      },"
-        L"      postMessage: function(message) {"
-        L"        if (window.ipc && window.ipc.postMessage) window.ipc.postMessage(message);"
-        L"      }"
-        L"    };"
-        L"  }"
         L"})();";
-    s->webview->AddScriptToExecuteOnDocumentCreated(ipcAndBridgeShim, nullptr);
+    s->webview->AddScriptToExecuteOnDocumentCreated(ipcShim, nullptr);
+
+    /* JS bridge object, built once in Kotlin (honours a custom jsBridgeName).
+     * Injected at document start so page scripts can call it without waiting
+     * on a Compose Finished race after each navigation. */
+    if (!opts.jsBridgeScript.empty()) {
+        s->webview->AddScriptToExecuteOnDocumentCreated(
+            opts.jsBridgeScript.c_str(), nullptr);
+    }
 
     if (!opts.transparent) {
         s->webview->AddScriptToExecuteOnDocumentCreated(
@@ -403,6 +386,7 @@ Java_dev_nucleusframework_webview_web_windows_WebView2WindowsBridge_nativeCreate
     jstring userAgent,
     jstring dataDirectory,
     jstring initScript,
+    jstring jsBridgeScript,
     jboolean incognito,
     jboolean enableDevtools,
     jboolean javascriptEnabled,
@@ -422,6 +406,7 @@ Java_dev_nucleusframework_webview_web_windows_WebView2WindowsBridge_nativeCreate
     opts.userAgent = compose_webview_jstring_to_wide(env, userAgent);
     opts.dataDirectory = compose_webview_jstring_to_wide(env, dataDirectory);
     opts.initScript = compose_webview_jstring_to_wide(env, initScript);
+    opts.jsBridgeScript = compose_webview_jstring_to_wide(env, jsBridgeScript);
     opts.incognito = incognito == JNI_TRUE;
     opts.enableDevtools = enableDevtools == JNI_TRUE;
     opts.javascriptEnabled = javascriptEnabled == JNI_TRUE;

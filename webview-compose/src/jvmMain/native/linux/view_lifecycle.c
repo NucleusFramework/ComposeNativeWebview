@@ -17,6 +17,7 @@ Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeCreate(
     jstring user_agent,
     jstring data_directory,
     jstring init_script,
+    jstring js_bridge_script,
     jboolean incognito,
     jboolean enable_devtools,
     jboolean javascript_enabled,
@@ -85,6 +86,27 @@ Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeCreate(
         NULL);
     webkit_user_content_manager_add_script(state->ucm, shim);
     webkit_user_script_unref(shim);
+
+    /*
+     * JS bridge object, built once in Kotlin. Injected at document start so
+     * page scripts can call it without waiting for a post-load injection.
+     */
+    if (js_bridge_script != NULL) {
+        const char *bridge_src = (*env)->GetStringUTFChars(env, js_bridge_script, NULL);
+        if (bridge_src != NULL && bridge_src[0] != '\0') {
+            WebKitUserScript *bridge = webkit_user_script_new(
+                bridge_src,
+                WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES,
+                WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START,
+                NULL,
+                NULL);
+            webkit_user_content_manager_add_script(state->ucm, bridge);
+            webkit_user_script_unref(bridge);
+        }
+        if (bridge_src != NULL) {
+            (*env)->ReleaseStringUTFChars(env, js_bridge_script, bridge_src);
+        }
+    }
 
     /*
      * Opaque mode: force a solid page background. Many pages (and about:blank)

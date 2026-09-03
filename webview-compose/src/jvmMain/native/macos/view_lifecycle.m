@@ -26,6 +26,7 @@ Java_dev_nucleusframework_webview_web_macos_WebKitMacOsBridge_nativeCreate(
     jstring user_agent,
     jstring data_directory,
     jstring init_script,
+    jstring js_bridge_script,
     jboolean incognito,
     jboolean enable_devtools,
     jboolean javascript_enabled,
@@ -79,6 +80,19 @@ Java_dev_nucleusframework_webview_web_macos_WebKitMacOsBridge_nativeCreate(
          injectionTime:WKUserScriptInjectionTimeAtDocumentStart
       forMainFrameOnly:NO];
     [ucm addUserScript:shim];
+
+    // JS bridge object, built once in Kotlin. Injected at document start so
+    // page scripts can call it without waiting for a post-load injection.
+    if (js_bridge_script != NULL) {
+        NSString *bridgeSrc = compose_webview_jstring_to_ns(env, js_bridge_script);
+        if (bridgeSrc != nil && bridgeSrc.length > 0) {
+            WKUserScript *bridge = [[WKUserScript alloc]
+                initWithSource:bridgeSrc
+                 injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+              forMainFrameOnly:NO];
+            [ucm addUserScript:bridge];
+        }
+    }
 
     if (!transparent) {
         NSString *css =
