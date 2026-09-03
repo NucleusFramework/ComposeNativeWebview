@@ -36,6 +36,13 @@ enum class SuiteCapability {
 
     /** Native isReady / focus / zoom / devtools (desktop JNI backends). */
     DesktopNativeControls,
+
+    /**
+     * JS bridge installed as a native user script at document start, so page
+     * scripts can call it while the document is still parsing. Desktop only:
+     * Android / iOS / WasmJs still inject it after load.
+     */
+    DocumentStartJsBridge,
 }
 
 expect fun suiteCapabilities(): Set<SuiteCapability>

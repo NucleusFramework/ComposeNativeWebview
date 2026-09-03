@@ -22,6 +22,7 @@ actual fun suiteCapabilities(): Set<SuiteCapability> =
         SuiteCapability.ScreenshotPixels,
         SuiteCapability.IsolatedNativeWebView,
         SuiteCapability.DesktopNativeControls,
+        SuiteCapability.DocumentStartJsBridge,
     )
 
 actual fun isPlatformWebViewReady(state: WebViewState): Boolean {
