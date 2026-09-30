@@ -717,6 +717,28 @@ internal suspend fun runFullSuite(
         assertThat(r.contains("2"), "API dead after headers path: $r")
     }
 
+    case("L10") {
+        // Regression guard for the desktop/macOS use-after-free: the scene
+        // host queues `setFrame` closures capturing the embedded NSView and
+        // drains them a frame later, so a WebView that leaves composition
+        // right after its rect changed used to free that view first and crash
+        // in `objc_retain`. The churn pane resizes every frame while mounted,
+        // and the jittered delays land the disposal on different frame phases.
+        val before = ctx.getChurnMounts()
+        repeat(CHURN_CYCLES) { i ->
+            ctx.setChurnMounted(true)
+            delay(120L + (i % 5) * 17L)
+            ctx.setChurnMounted(false)
+            delay(30L + (i % 3) * 11L)
+        }
+        val mounted = ctx.getChurnMounts() - before
+        assertThat(mounted >= CHURN_CYCLES, "churn pane mounted $mounted of $CHURN_CYCLES times")
+        // The surviving main WebView must still be fully operational.
+        loadHtmlAwaitMarker(ctx.navigator, "after-churn")
+        val r = evalJs(ctx.navigator, "2+3")
+        assertThat(r.contains("5"), "main WebView dead after churn: $r")
+    }
+
     // ── Rendering ────────────────────────────────────────────────────
     // The WebView is a real native view (no offscreen rendering, no frame
     // pacing in this library), so these publish what the host reaches — a
@@ -751,3 +773,9 @@ internal suspend fun runFullSuite(
  * (CI runners render in software).
  */
 private const val MIN_ANIMATING_FPS = 10
+
+/**
+ * Mount/unmount cycles L10 drives. High enough to hit the one-frame-wide
+ * disposal race repeatedly, low enough to keep the case around two seconds.
+ */
+private const val CHURN_CYCLES = 12

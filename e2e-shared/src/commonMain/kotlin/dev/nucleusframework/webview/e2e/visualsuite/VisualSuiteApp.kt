@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,6 +121,13 @@ fun VisualSuiteApp(
     var secondaryHits by remember { mutableStateOf(0) }
     var onCreatedFired by remember { mutableStateOf(false) }
 
+    // L10 drives these: a second, real WebView that enters and leaves
+    // composition while its rect changes every frame.
+    var churnMounted by remember { mutableStateOf(false) }
+    // Plain counter, not snapshot state: the runner reads it from its own
+    // coroutine and must see the mount that just happened, not a snapshot of it.
+    val churnMounts = remember { intArrayOf(0) }
+
     DisposableEffect(jsBridge) {
         val ping =
             object : IJsMessageHandler {
@@ -189,6 +197,8 @@ fun VisualSuiteApp(
                 setModifyMap = { modifyMap = it },
                 getOnCreatedFired = { onCreatedFired },
                 parentHandle = parentHandle,
+                setChurnMounted = { churnMounted = it },
+                getChurnMounts = { churnMounts[0] },
             )
         val started = currentTimeMillis()
         var path = ""
@@ -270,9 +280,12 @@ fun VisualSuiteApp(
                 state = state,
                 navigator = navigator,
                 webViewJsBridge = jsBridge,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 onCreated = { onCreatedFired = true },
             )
+            if (churnMounted) {
+                ChurnWebViewPane(onMounted = { churnMounts[0]++ })
+            }
         }
 
         // Checklist pane
@@ -376,4 +389,56 @@ internal data class SuiteContext(
     val getOnCreatedFired: () -> Boolean,
     /** Tao HWND for isolated Windows WebView2 instances (0 elsewhere). */
     val parentHandle: Long = 0L,
+    /** Mounts / unmounts the L10 churn pane. */
+    val setChurnMounted: (Boolean) -> Unit = {},
+    /** How often the L10 churn pane has entered composition so far. */
+    val getChurnMounts: () -> Int = { 0 },
 )
+
+/**
+ * A second, real WebView whose height changes on **every** frame while it is
+ * mounted, so `onGloballyPositioned` keeps the host's native-view layout queue
+ * busy. L10 mounts and unmounts it repeatedly: the disposal then lands in the
+ * same frame as a pending layout update, which is the window the desktop
+ * use-after-free lived in.
+ */
+@Composable
+private fun ChurnWebViewPane(onMounted: () -> Unit) {
+    val state =
+        rememberWebViewStateWithHTMLData(
+            data = pageWithMarker("churn"),
+            baseUrl = "https://suite.local/churn",
+        ).also {
+            it.webSettings.desktopWebSettings.transparent = false
+            it.webSettings.backgroundColor = Color.White
+        }
+    val navigator = rememberWebViewNavigator()
+    var extraHeight by remember { mutableStateOf(0) }
+    // Counted here, not in the LaunchedEffect below: setup runs while the
+    // change is applied, so a short mount window still registers.
+    DisposableEffect(Unit) {
+        onMounted()
+        onDispose { }
+    }
+    LaunchedEffect(Unit) {
+        var frame = 0
+        while (true) {
+            withFrameNanos { }
+            frame++
+            extraHeight = frame % CHURN_PANE_AMPLITUDE_DP
+        }
+    }
+    WebView(
+        state = state,
+        navigator = navigator,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height((CHURN_PANE_BASE_DP + extraHeight).dp),
+    )
+}
+
+/** Resting height of the L10 churn pane. */
+private const val CHURN_PANE_BASE_DP = 48
+
+/** Per-frame height sweep of the L10 churn pane, in dp. */
+private const val CHURN_PANE_AMPLITUDE_DP = 24

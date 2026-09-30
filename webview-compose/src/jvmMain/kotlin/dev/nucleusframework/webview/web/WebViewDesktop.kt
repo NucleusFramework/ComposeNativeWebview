@@ -320,6 +320,23 @@ actual fun ActualWebView(
         }
     }
 
+    // Registered *before* the NativeView below so Compose forgets it *after*
+    // NativeView's own effects: effects are forgotten in reverse registration
+    // order, so the scene host detaches the embedded native view (and stops
+    // touching its handle) before the backend releases it. Registering this
+    // last would free the handle first and leave `detach` — and any interop
+    // action the host queued for the frame being presented — pointing at
+    // freed memory.
+    DisposableEffect(nativeWebView) {
+        onDispose {
+            state.webView = null
+            webViewJsBridge?.webView = null
+            (state.cookieManager as? DesktopCookieManager)?.attach(null)
+            currentOnDispose(nativeWebView)
+            nativeWebView.destroy()
+        }
+    }
+
     val linuxWebView = nativeWebView as? LinuxWebKitNativeWebView
     val macosWebView = nativeWebView as? MacOsWebKitNativeWebView
     val windowsWebView = nativeWebView as? WindowsWebView2NativeWebView
@@ -365,16 +382,6 @@ actual fun ActualWebView(
                 }
                 content()
             }
-        }
-    }
-
-    DisposableEffect(nativeWebView) {
-        onDispose {
-            state.webView = null
-            webViewJsBridge?.webView = null
-            (state.cookieManager as? DesktopCookieManager)?.attach(null)
-            currentOnDispose(nativeWebView)
-            nativeWebView.destroy()
         }
     }
 }

@@ -1,12 +1,72 @@
 #include "compose_webview_internal.h"
 
+/**
+ * Seconds a torn-down WKWebView is kept alive before its last strong
+ * reference is dropped. See [compose_webview_retire_view].
+ */
+static const NSTimeInterval kComposeWebViewRetireDelay = 1.0;
+
+/** Torn-down WKWebViews still inside their retire window (main thread only). */
+static NSMutableArray<WKWebView *> *compose_webview_retired = nil;
+
+/**
+ * Keeps [view] alive for [kComposeWebViewRetireDelay] after teardown.
+ *
+ * The NSView handed to Nucleus' `NativeView` is this WKWebView itself, and
+ * the macOS scene host does not apply layout to embedded subviews right
+ * away: `TaoComposeSceneHost.nativeViewHost().setFrame` enqueues a closure
+ * capturing the raw NSView pointer into the frame's interop transaction,
+ * which is drained later, on the main queue, inside the Metal present.
+ * `detach` on the other hand is immediate and cannot purge those pending
+ * closures.
+ *
+ * Releasing the WKWebView synchronously from composition teardown therefore
+ * races the drain: a `setFrame` queued for the frame being presented reaches
+ * `objc_retain` on freed memory and the process dies with SIGSEGV in
+ * `objc_retain` (SEGV_ACCERR). The same ordering also lets Compose forget
+ * this effect *before* `NativeView`'s own detach effect — effects are
+ * forgotten in reverse registration order — so `nativeRemoveSubview` would
+ * see a dangling pointer too.
+ *
+ * Deferring only the final release keeps the pointer valid across both:
+ * the view is already stopped, unparented and delegate-free, so a late
+ * `setFrame` / `nativeRemoveSubview` lands on an inert but live object.
+ */
+static void compose_webview_retire_view(WKWebView *view) {
+    if (view == nil) return;
+    /* The block captures `view` strongly, so the reference survives the hop
+       even when teardown ran off the main thread. */
+    void (^retire)(void) = ^{
+        if (compose_webview_retired == nil) {
+            compose_webview_retired = [NSMutableArray array];
+        }
+        [compose_webview_retired addObject:view];
+        dispatch_after(
+            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kComposeWebViewRetireDelay * NSEC_PER_SEC)),
+            dispatch_get_main_queue(),
+            ^{
+                [compose_webview_retired removeObjectIdenticalTo:view];
+            });
+    };
+    if ([NSThread isMainThread]) {
+        retire();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), retire);
+    }
+}
+
 @implementation ComposeWebViewState
 
 - (void)teardown {
     if (self.webView != nil) {
         self.webView.navigationDelegate = nil;
         [self.webView.configuration.userContentController removeScriptMessageHandlerForName:@"ipc"];
+        [self.webView stopLoading];
         [self.webView removeFromSuperview];
+        // Hand the last strong reference to the retire list instead of
+        // dropping it here — the scene host may still hold a queued
+        // `setFrame` for this NSView.
+        compose_webview_retire_view(self.webView);
         self.webView = nil;
     }
     self.configuration = nil;
