@@ -1,6 +1,7 @@
 package dev.nucleusframework.webview.web
 
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
+import dev.nucleusframework.webview.setting.WebViewColorScheme
 import dev.nucleusframework.webview.util.KLogger
 import dev.nucleusframework.webview.web.linux.LinuxWebKitNativeWebView
 import dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView
@@ -117,6 +118,14 @@ internal class DesktopWebView(
         KLogger.d { "evaluateJavaScript: $script" }
         nativeWebView.evaluateJavaScript(script) { result ->
             callback?.invoke(result)
+        }
+    }
+
+    override fun setColorScheme(scheme: WebViewColorScheme) {
+        when (val native = nativeWebView) {
+            is LinuxWebKitNativeWebView -> native.setColorScheme(scheme)
+            is MacOsWebKitNativeWebView -> native.setColorScheme(scheme)
+            is WindowsWebView2NativeWebView -> native.setColorScheme(scheme)
         }
     }
 

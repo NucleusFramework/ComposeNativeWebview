@@ -171,6 +171,10 @@ internal object WebKitMacOsBridge {
     @JvmStatic
     external fun nativeSetZoomLevel(handle: Long, zoom: Double)
 
+    /** `appearance`: 0 = system (clears the override), 1 = light, 2 = dark. */
+    @JvmStatic
+    external fun nativeSetAppearance(handle: Long, appearance: Int)
+
     @JvmStatic
     external fun nativeFocus(handle: Long)
 

@@ -202,6 +202,33 @@ Java_dev_nucleusframework_webview_web_windows_WebView2WindowsBridge_nativeSetZoo
     }
 }
 
+/**
+ * Sets the WebView2 profile's preferred color scheme, which Chromium resolves
+ * `prefers-color-scheme`/`color-scheme` against - see WebViewColorScheme's own Kotlin doc
+ * (commonMain) for why this is needed at all. scheme: 0 = auto (follow the OS), 1 = light,
+ * 2 = dark. ICoreWebView2_13::get_Profile/ICoreWebView2Profile::put_PreferredColorScheme were
+ * introduced in WebView2 SDK 1.0.1264.42, well below the 1.0.2210.55 this project vendors (see
+ * build.bat) - written against the documented API surface, but not locally compiled/verified on
+ * Windows in this change; please confirm with a real Windows build before relying on it.
+ */
+JNIEXPORT void JNICALL
+Java_dev_nucleusframework_webview_web_windows_WebView2WindowsBridge_nativeSetPreferredColorScheme(
+    JNIEnv *, jclass, jlong handle, jint scheme) {
+    ComposeWebViewState *s = compose_webview_state_from_handle(handle);
+    if (!s || !s->webview) return;
+    ComPtr<ICoreWebView2_13> webview13;
+    if (FAILED(s->webview.As(&webview13)) || !webview13) return;
+    ComPtr<ICoreWebView2Profile> profile;
+    if (FAILED(webview13->get_Profile(&profile)) || !profile) return;
+    COREWEBVIEW2_PREFERRED_COLOR_SCHEME nativeScheme;
+    switch (scheme) {
+        case 1: nativeScheme = COREWEBVIEW2_PREFERRED_COLOR_SCHEME_LIGHT; break;
+        case 2: nativeScheme = COREWEBVIEW2_PREFERRED_COLOR_SCHEME_DARK; break;
+        default: nativeScheme = COREWEBVIEW2_PREFERRED_COLOR_SCHEME_AUTO; break;
+    }
+    profile->put_PreferredColorScheme(nativeScheme);
+}
+
 JNIEXPORT void JNICALL
 Java_dev_nucleusframework_webview_web_windows_WebView2WindowsBridge_nativeFocus(
     JNIEnv *, jclass, jlong handle) {

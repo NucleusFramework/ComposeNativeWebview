@@ -169,6 +169,33 @@ Java_dev_nucleusframework_webview_web_macos_WebKitMacOsBridge_nativeSetZoomLevel
     state.webView.pageZoom = zoom;
 }
 
+/**
+ * Sets the WKWebView's own `NSAppearance`, which WebKit resolves `prefers-color-scheme`/
+ * `color-scheme` against for content that doesn't set every color explicitly - see
+ * WebViewColorScheme's own Kotlin doc (commonMain) for why this is needed at all.
+ * appearance: 0 = system (nil, follow the window's own appearance), 1 = light (aqua),
+ * 2 = dark (darkAqua).
+ */
+JNIEXPORT void JNICALL
+Java_dev_nucleusframework_webview_web_macos_WebKitMacOsBridge_nativeSetAppearance(
+    JNIEnv *env, jclass clazz, jlong handle, jint appearance)
+{
+    (void)env; (void)clazz;
+    ComposeWebViewState *state = compose_webview_state_from_handle(handle);
+    if (state == nil || state.webView == nil) return;
+    switch (appearance) {
+        case 1:
+            state.webView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+            break;
+        case 2:
+            state.webView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+            break;
+        default:
+            state.webView.appearance = nil;
+            break;
+    }
+}
+
 JNIEXPORT void JNICALL
 Java_dev_nucleusframework_webview_web_macos_WebKitMacOsBridge_nativeFocus(
     JNIEnv *env, jclass clazz, jlong handle)

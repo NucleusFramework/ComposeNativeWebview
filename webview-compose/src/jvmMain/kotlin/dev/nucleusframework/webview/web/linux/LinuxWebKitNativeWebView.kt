@@ -2,6 +2,7 @@ package dev.nucleusframework.webview.web.linux
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.nucleusframework.webview.setting.WebViewColorScheme
 import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.window.tao.NucleusPlatformView
 import kotlinx.coroutines.CompletableDeferred
@@ -24,6 +25,7 @@ class LinuxWebKitNativeWebView(
     zoomLevel: Double = 1.0,
     transparent: Boolean = false,
     backgroundColor: Color = Color.White,
+    colorScheme: WebViewColorScheme = WebViewColorScheme.SYSTEM,
 ) : NativeWebView() {
     private val handle: Long
     private val gtkWidgetHandle: Long
@@ -65,6 +67,21 @@ class LinuxWebKitNativeWebView(
         require(handle != 0L) { "Failed to create WebKitWebView" }
         gtkWidgetHandle = WebKitLinuxBridge.nativeGetGtkWidget(handle)
         require(gtkWidgetHandle != 0L) { "Failed to get GtkWidget handle" }
+        if (colorScheme != WebViewColorScheme.SYSTEM) {
+            setColorScheme(colorScheme)
+        }
+    }
+
+    /**
+     * Sets `gtk-application-prefer-dark-theme` on this widget's own `GtkSettings` - see
+     * [WebViewColorScheme]'s own doc, and the native implementation's own doc for why this is
+     * display-wide rather than per-widget on this platform. [WebViewColorScheme.SYSTEM] restores
+     * `false` (GTK's own default), not necessarily "follow the OS" - there is no narrower API to
+     * reach for here.
+     */
+    fun setColorScheme(scheme: WebViewColorScheme) {
+        if (!isReady()) return
+        WebKitLinuxBridge.nativeSetPreferDarkTheme(handle, scheme == WebViewColorScheme.DARK)
     }
 
     /** Creates the [NucleusPlatformView] used by NativeView embedding. */

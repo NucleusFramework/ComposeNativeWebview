@@ -180,6 +180,29 @@ Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeSetZoomLevel
     webkit_web_view_set_zoom_level(state->web_view, zoom);
 }
 
+/**
+ * Sets the "prefer dark theme" GTK setting on this widget's own GtkSettings, which WebKitGTK
+ * consults when deciding what to report for `prefers-color-scheme` - see WebViewColorScheme's own
+ * Kotlin doc (commonMain) for why this is needed at all.
+ *
+ * Unlike macOS's NSAppearance (per-NSView) and Windows' CoreWebView2Profile (per-profile), GTK has
+ * no equivalent per-widget scheme override - `gtk-application-prefer-dark-theme` lives on
+ * GtkSettings, which is shared per GdkScreen/display, so this affects every GTK widget on that
+ * display's theme rendering too, not just this WebView. Best effort; there is no narrower API to
+ * reach for on this platform.
+ */
+JNIEXPORT void JNICALL
+Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeSetPreferDarkTheme(
+    JNIEnv *env, jclass clazz, jlong handle, jboolean prefer_dark)
+{
+    (void) env; (void) clazz;
+    ComposeWebViewState *state = compose_webview_state_from_handle(handle);
+    if (state == NULL || state->web_view == NULL) return;
+    GtkSettings *settings = gtk_widget_get_settings(GTK_WIDGET(state->web_view));
+    if (settings == NULL) return;
+    g_object_set(settings, "gtk-application-prefer-dark-theme", prefer_dark ? TRUE : FALSE, NULL);
+}
+
 JNIEXPORT void JNICALL
 Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeFocus(
     JNIEnv *env, jclass clazz, jlong handle)

@@ -2,6 +2,7 @@ package dev.nucleusframework.webview.web.macos
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.nucleusframework.webview.setting.WebViewColorScheme
 import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.window.tao.NucleusPlatformView
 import kotlinx.coroutines.CompletableDeferred
@@ -24,6 +25,7 @@ class MacOsWebKitNativeWebView(
     zoomLevel: Double = 1.0,
     transparent: Boolean = false,
     backgroundColor: Color = Color.White,
+    colorScheme: WebViewColorScheme = WebViewColorScheme.SYSTEM,
 ) : NativeWebView() {
     private val handle: Long
     private val nsViewHandle: Long
@@ -64,6 +66,25 @@ class MacOsWebKitNativeWebView(
         require(handle != 0L) { "Failed to create WKWebView" }
         nsViewHandle = WebKitMacOsBridge.nativeGetNsView(handle)
         require(nsViewHandle != 0L) { "Failed to get NSView handle" }
+        if (colorScheme != WebViewColorScheme.SYSTEM) {
+            setColorScheme(colorScheme)
+        }
+    }
+
+    /**
+     * Sets this WKWebView's own `NSAppearance`, which Chromium/WebKit resolves
+     * `prefers-color-scheme`/`color-scheme` against - see [WebViewColorScheme]'s own doc for why
+     * this is necessary at all. [WebViewColorScheme.SYSTEM] clears the override (`nil`), letting
+     * the view follow its window's appearance again.
+     */
+    fun setColorScheme(scheme: WebViewColorScheme) {
+        if (!isReady()) return
+        val appearance = when (scheme) {
+            WebViewColorScheme.SYSTEM -> 0
+            WebViewColorScheme.LIGHT -> 1
+            WebViewColorScheme.DARK -> 2
+        }
+        WebKitMacOsBridge.nativeSetAppearance(handle, appearance)
     }
 
     /** Creates the [NucleusPlatformView] used by NativeView embedding. */

@@ -28,6 +28,10 @@ sealed class PlatformWebSettings {
         var incognito: Boolean = false,
         var autoplayWithoutUserInteraction: Boolean = false,
         var focused: Boolean = true,
+        /** See [WebViewColorScheme]'s own doc. Applied once, at WebView creation time - like
+         *  every other field here - call [dev.nucleusframework.webview.web.IWebView.setColorScheme]
+         *  to change it afterward without recreating the WebView. */
+        var colorScheme: WebViewColorScheme = WebViewColorScheme.SYSTEM,
     ) : PlatformWebSettings()
 
     data class IOSWebSettings(

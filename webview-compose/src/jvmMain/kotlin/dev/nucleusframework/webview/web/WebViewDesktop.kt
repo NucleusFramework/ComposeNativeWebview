@@ -89,6 +89,7 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
             zoomLevel = settings.zoomLevel,
             transparent = desktop.transparent,
             backgroundColor = background,
+            colorScheme = desktop.colorScheme,
         )
     }
 
@@ -104,6 +105,7 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
             zoomLevel = settings.zoomLevel,
             transparent = desktop.transparent,
             backgroundColor = background,
+            colorScheme = desktop.colorScheme,
         )
     }
 
@@ -124,6 +126,7 @@ actual fun defaultWebViewFactory(param: WebViewFactoryParam): NativeWebView {
             zoomLevel = settings.zoomLevel,
             transparent = desktop.transparent,
             backgroundColor = background,
+            colorScheme = desktop.colorScheme,
         )
     }
 

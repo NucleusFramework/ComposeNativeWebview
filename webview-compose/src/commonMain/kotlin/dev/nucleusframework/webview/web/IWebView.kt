@@ -2,6 +2,7 @@ package dev.nucleusframework.webview.web
 
 import dev.nucleusframework.webview.jsbridge.WebViewJsBridge
 import dev.nucleusframework.webview.jsbridge.jsBridgeObjectScript
+import dev.nucleusframework.webview.setting.WebViewColorScheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -52,6 +53,14 @@ interface IWebView {
         script: String,
         callback: ((String) -> Unit)? = null
     )
+
+    /**
+     * Changes which color scheme this WebView renders loaded content in - see
+     * [WebViewColorScheme]'s own doc. No-op by default; only the desktop backends (Linux/macOS/
+     * Windows) override this, since every other engine this library targets already resolves
+     * `prefers-color-scheme` from the system theme correctly on its own.
+     */
+    fun setColorScheme(scheme: WebViewColorScheme) {}
 
     /**
      * Captures a screenshot of the WebView.

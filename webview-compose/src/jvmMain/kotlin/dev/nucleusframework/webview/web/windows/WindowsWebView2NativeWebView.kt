@@ -2,6 +2,7 @@ package dev.nucleusframework.webview.web.windows
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.nucleusframework.webview.setting.WebViewColorScheme
 import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.window.tao.NucleusPlatformView
 import kotlinx.coroutines.CompletableDeferred
@@ -32,6 +33,7 @@ class WindowsWebView2NativeWebView(
     zoomLevel: Double = 1.0,
     transparent: Boolean = false,
     backgroundColor: Color = Color.White,
+    colorScheme: WebViewColorScheme = WebViewColorScheme.SYSTEM,
 ) : NativeWebView() {
     private val handle: Long
     private var released = false
@@ -73,6 +75,25 @@ class WindowsWebView2NativeWebView(
         require(handle != 0L) {
             "Failed to create WebView2 (is WebView2 Runtime installed?)"
         }
+        if (colorScheme != WebViewColorScheme.SYSTEM) {
+            setColorScheme(colorScheme)
+        }
+    }
+
+    /**
+     * Sets this profile's `PreferredColorScheme`, which Chromium resolves
+     * `prefers-color-scheme`/`color-scheme` against - see [WebViewColorScheme]'s own doc for why
+     * this is necessary at all. [WebViewColorScheme.SYSTEM] restores the default (`Auto`),
+     * following the OS again.
+     */
+    fun setColorScheme(scheme: WebViewColorScheme) {
+        if (!isReady()) return
+        val native = when (scheme) {
+            WebViewColorScheme.SYSTEM -> 0
+            WebViewColorScheme.LIGHT -> 1
+            WebViewColorScheme.DARK -> 2
+        }
+        WebView2WindowsBridge.nativeSetPreferredColorScheme(handle, native)
     }
 
     /**

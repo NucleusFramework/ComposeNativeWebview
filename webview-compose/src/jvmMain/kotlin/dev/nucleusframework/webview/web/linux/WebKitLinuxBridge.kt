@@ -175,6 +175,11 @@ internal object WebKitLinuxBridge {
     @JvmStatic
     external fun nativeSetZoomLevel(handle: Long, zoom: Double)
 
+    /** Sets `GtkSettings:gtk-application-prefer-dark-theme` on this widget's own display - see the
+     *  native implementation's own doc for why this is display-wide, not per-widget. */
+    @JvmStatic
+    external fun nativeSetPreferDarkTheme(handle: Long, preferDark: Boolean)
+
     @JvmStatic
     external fun nativeFocus(handle: Long)
 

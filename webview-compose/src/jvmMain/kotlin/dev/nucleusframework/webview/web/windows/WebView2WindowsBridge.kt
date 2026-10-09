@@ -173,6 +173,10 @@ internal object WebView2WindowsBridge {
     @JvmStatic
     external fun nativeSetZoomLevel(handle: Long, zoom: Double)
 
+    /** `scheme`: 0 = auto (follow the OS), 1 = light, 2 = dark. */
+    @JvmStatic
+    external fun nativeSetPreferredColorScheme(handle: Long, scheme: Int)
+
     @JvmStatic
     external fun nativeFocus(handle: Long)
 
