@@ -2,6 +2,7 @@ package dev.nucleusframework.webview.web.macos
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.nucleusframework.webview.web.NativeIpcMessage
 import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.window.tao.NucleusPlatformView
 import kotlinx.coroutines.CompletableDeferred
@@ -145,7 +146,9 @@ class MacOsWebKitNativeWebView(
         WebKitMacOsBridge.nativeEvaluateJavaScript(handle, script)
     }
 
-    override fun drainIpcMessages(): List<String> =
+    override fun drainIpcMessages(): List<String> = drainIpcMessagesWithSender().map { it.body }
+
+    override fun drainIpcMessagesWithSender(): List<NativeIpcMessage> =
         if (!isReady()) emptyList() else WebKitMacOsBridge.drainIpcMessages(handle)
 
     override fun addNavigateListener(listener: (String) -> Boolean) {

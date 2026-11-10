@@ -280,8 +280,8 @@ actual fun ActualWebView(
             return@LaunchedEffect
         }
         while (true) {
-            for (raw in nativeWebView.drainIpcMessages()) {
-                parseJsMessage(raw)?.let { webViewJsBridge.dispatch(it) }
+            for (message in nativeWebView.drainIpcMessagesWithSender()) {
+                parseJsMessage(message.body, sender = message.sender)?.let { webViewJsBridge.dispatch(it) }
             }
             delay(50.milliseconds)
         }

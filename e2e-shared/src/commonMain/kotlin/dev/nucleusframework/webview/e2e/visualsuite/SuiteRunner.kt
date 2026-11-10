@@ -4,6 +4,7 @@ import composewebview.e2e_shared.generated.resources.Res
 import dev.nucleusframework.webview.cookie.Cookie
 import dev.nucleusframework.webview.jsbridge.IJsMessageHandler
 import dev.nucleusframework.webview.jsbridge.JsMessage
+import dev.nucleusframework.webview.jsbridge.JsMessageSender
 import dev.nucleusframework.webview.web.LoadingState
 import dev.nucleusframework.webview.web.WebContent
 import dev.nucleusframework.webview.web.WebViewFileReadType
@@ -382,6 +383,30 @@ internal suspend fun runFullSuite(
             }
         }
     }
+    case("B12", required = setOf(SuiteCapability.JsMessageSender)) {
+        val senders = collectSenders(ctx) {
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b12")
+            evalJs(
+                ctx.navigator,
+                "window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from:'main'}), function(d){}); 's'",
+            )
+        }
+        val sender = senders["main"]
+        assertThat(
+            sender == JsMessageSender(origin = "https://suite.local", isMainFrame = true),
+            "sender=$sender",
+        )
+    }
+    case("B13", required = setOf(SuiteCapability.JsMessageSender)) {
+        val senders = collectSenders(ctx, expect = "frame") {
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b13", pageWithBridgeCallingFrame("sender-b13"))
+        }
+        val sender = senders["frame"]
+        assertThat(
+            sender == JsMessageSender(origin = "null", isMainFrame = false),
+            "sender=$sender",
+        )
+    }
 
     // ── Cookies ──────────────────────────────────────────────────────
     case("K01", required = setOf(SuiteCapability.CookieDomainApi)) {
@@ -751,3 +776,36 @@ internal suspend fun runFullSuite(
  * (CI runners render in software).
  */
 private const val MIN_ANIMATING_FPS = 10
+
+/**
+ * Runs [send] with a `suiteSender` handler registered and returns the sender of each
+ * message it received, keyed by the message's `from` param, once [expect] has arrived.
+ */
+private suspend fun collectSenders(
+    ctx: SuiteContext,
+    expect: String = "main",
+    send: suspend () -> Unit,
+): Map<String, JsMessageSender?> {
+    val senders = mutableMapOf<String, JsMessageSender?>()
+    val handler =
+        object : IJsMessageHandler {
+            override fun methodName() = "suiteSender"
+
+            override fun handle(
+                message: JsMessage,
+                navigator: WebViewNavigator?,
+                callback: (String) -> Unit,
+            ) {
+                val from = if (message.params.contains("frame")) "frame" else "main"
+                senders[from] = message.sender
+            }
+        }
+    ctx.jsBridge.register(handler)
+    try {
+        send()
+        awaitUntil(12_000, "suiteSender from $expect") { senders.containsKey(expect) }
+    } finally {
+        ctx.jsBridge.unregister(handler)
+    }
+    return senders
+}

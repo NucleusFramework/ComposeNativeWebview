@@ -42,6 +42,22 @@ internal fun pageWithMarker(marker: String, title: String = "SUITE"): String =
     """.trimIndent()
 
 /**
+ * A page embedding a sandboxed frame that calls the bridge on its own. The frame's
+ * origin is opaque, so the engine must report it as `"null"` and not as the embedder's.
+ */
+internal fun pageWithBridgeCallingFrame(tag: String): String {
+    val frame =
+        "<script>window.kmpJsBridge.callNative('suiteSender'," +
+            "JSON.stringify({from:'frame'}),function(d){});</script>"
+    return """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>FrameSender</title></head>
+    <body><div id="marker">$tag</div>
+    <iframe sandbox="allow-scripts" srcdoc="${frame.replace("\"", "&quot;")}"></iframe>
+    </body></html>
+    """.trimIndent()
+}
+
+/**
  * Calls the JS bridge from an inline script, i.e. while the document is still
  * parsing, and records in `window.__earlyBridge` whether the bridge was there.
  *

@@ -1,5 +1,15 @@
 #include "compose_webview_internal.h"
 
+// Serializes a frame's origin the way `window.origin` does: "scheme://host[:port]", or
+// "null" for an opaque origin, which WebKit reports with an empty scheme and host.
+static NSString *compose_webview_serialize_origin(WKSecurityOrigin *origin) {
+    if (origin == nil || origin.protocol.length == 0 || origin.host.length == 0) return @"null";
+    NSString *host = origin.host;
+    if ([host containsString:@":"]) host = [NSString stringWithFormat:@"[%@]", host];
+    if (origin.port == 0) return [NSString stringWithFormat:@"%@://%@", origin.protocol, host];
+    return [NSString stringWithFormat:@"%@://%@:%ld", origin.protocol, host, (long)origin.port];
+}
+
 @implementation ComposeWebViewState (Signals)
 
 - (void)userContentController:(WKUserContentController *)userContentController
@@ -28,10 +38,17 @@
     compose_webview_ensure_bridge_methods(env);
     if (compose_webview_bridge_class() == NULL || compose_webview_on_ipc() == NULL) return;
 
+    // The sender as WebKit knows it, not as the page describes itself.
+    WKFrameInfo *frame = message.frameInfo;
     jstring jmsg = compose_webview_ns_to_jstring(env, payload);
+    jstring jorigin = frame == nil
+        ? NULL
+        : compose_webview_ns_to_jstring(env, compose_webview_serialize_origin(frame.securityOrigin));
     (*env)->CallStaticVoidMethod(
-        env, compose_webview_bridge_class(), compose_webview_on_ipc(), self.handle, jmsg);
+        env, compose_webview_bridge_class(), compose_webview_on_ipc(), self.handle, jmsg,
+        jorigin, (jboolean)(frame != nil && frame.isMainFrame));
     if (jmsg != NULL) (*env)->DeleteLocalRef(env, jmsg);
+    if (jorigin != NULL) (*env)->DeleteLocalRef(env, jorigin);
     if ((*env)->ExceptionCheck(env)) {
         (*env)->ExceptionClear(env);
     }

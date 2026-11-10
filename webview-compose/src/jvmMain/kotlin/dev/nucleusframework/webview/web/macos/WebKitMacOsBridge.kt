@@ -1,6 +1,8 @@
 package dev.nucleusframework.webview.web.macos
 
 import dev.nucleusframework.core.runtime.NativeLibraryLoader
+import dev.nucleusframework.webview.jsbridge.JsMessageSender
+import dev.nucleusframework.webview.web.NativeIpcMessage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.CompletableDeferred
@@ -23,7 +25,7 @@ internal object WebKitMacOsBridge {
     private val navigateHandlers =
         ConcurrentHashMap<Long, MutableList<(String) -> Boolean>>()
     private val ipcQueues =
-        ConcurrentHashMap<Long, ConcurrentLinkedQueue<String>>()
+        ConcurrentHashMap<Long, ConcurrentLinkedQueue<NativeIpcMessage>>()
     private val jsCallbacks =
         ConcurrentHashMap<Long, ConcurrentLinkedQueue<(String) -> Unit>>()
     private val cookieDeferreds =
@@ -39,9 +41,9 @@ internal object WebKitMacOsBridge {
         navigateHandlers[handle]?.remove(listener)
     }
 
-    fun drainIpcMessages(handle: Long): List<String> {
+    fun drainIpcMessages(handle: Long): List<NativeIpcMessage> {
         val queue = ipcQueues[handle] ?: return emptyList()
-        val drained = ArrayList<String>()
+        val drained = ArrayList<NativeIpcMessage>()
         while (true) {
             val next = queue.poll() ?: break
             drained += next
@@ -82,9 +84,14 @@ internal object WebKitMacOsBridge {
         return handlers.any { it(url) }
     }
 
+    /**
+     * [origin] and [isMainFrame] come from the message's `WKFrameInfo`; [origin] is null when
+     * WebKit supplied no frame.
+     */
     @JvmStatic
-    fun nativeOnIpcMessage(handle: Long, message: String) {
-        ipcQueues.getOrPut(handle) { ConcurrentLinkedQueue() }.add(message)
+    fun nativeOnIpcMessage(handle: Long, message: String, origin: String?, isMainFrame: Boolean) {
+        val sender = origin?.let { JsMessageSender(origin = it, isMainFrame = isMainFrame) }
+        ipcQueues.getOrPut(handle) { ConcurrentLinkedQueue() }.add(NativeIpcMessage(message, sender))
     }
 
     @JvmStatic

@@ -19,6 +19,7 @@ private data class ParsedJsBridgeMessage(
 internal fun parseJsMessage(
     raw: String,
     expectedType: String? = null,
+    sender: JsMessageSender? = null,
 ): JsMessage? = runCatching {
     val message = jsBridgeJson.decodeFromString<ParsedJsBridgeMessage>(raw)
     if (expectedType != null && message.type != expectedType) return null
@@ -31,7 +32,8 @@ internal fun parseJsMessage(
     JsMessage(
         callbackId = callbackId,
         methodName = methodName,
-        params = params
+        params = params,
+        sender = sender,
     )
 }.getOrNull()
 

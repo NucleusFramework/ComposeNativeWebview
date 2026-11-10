@@ -43,6 +43,12 @@ enum class SuiteCapability {
      * Android / iOS / WasmJs still inject it after load.
      */
     DocumentStartJsBridge,
+
+    /**
+     * Bridge messages carry the sender (origin, main frame or not) as the engine
+     * reports it. macOS desktop only so far.
+     */
+    JsMessageSender,
 }
 
 expect fun suiteCapabilities(): Set<SuiteCapability>

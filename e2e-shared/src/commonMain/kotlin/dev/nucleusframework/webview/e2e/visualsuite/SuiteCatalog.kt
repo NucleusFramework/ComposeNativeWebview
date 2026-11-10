@@ -51,6 +51,8 @@ internal fun suiteCatalog(): List<SuiteCase> =
         SuiteCase("B09", "JS Bridge", "rapid IPC burst (×12) drains without drop"),
         SuiteCase("B10", "JS Bridge", "bridge callable from an inline script (document start)"),
         SuiteCase("B11", "JS Bridge", "bridge survives loads that keep the same URL (×3)"),
+        SuiteCase("B12", "JS Bridge", "message sender: origin of the main frame"),
+        SuiteCase("B13", "JS Bridge", "message sender: embedded frame is not the main frame"),
         // Cookies (Wry: set/get/clear_for_url/clear_all + attributes)
         SuiteCase("K01", "Cookies", "setCookie + getCookies finds cookie"),
         SuiteCase("K02", "Cookies", "removeCookies drops cookie"),
