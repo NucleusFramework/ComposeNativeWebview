@@ -86,7 +86,7 @@ jobs:
           retention-days: 1
 
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
