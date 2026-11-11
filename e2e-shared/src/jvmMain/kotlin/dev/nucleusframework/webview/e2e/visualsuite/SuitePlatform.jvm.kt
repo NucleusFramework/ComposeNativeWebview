@@ -15,10 +15,12 @@ import kotlinx.coroutines.delay
 
 actual fun suiteCapabilities(): Set<SuiteCapability> =
     desktopCapabilities +
-        if (System.getProperty("os.name", "").lowercase(Locale.ENGLISH).contains("mac")) {
-            setOf(SuiteCapability.JsMessageSender)
-        } else {
-            emptySet()
+        System.getProperty("os.name", "").lowercase(Locale.ENGLISH).let { os ->
+            when {
+                os.contains("mac") -> setOf(SuiteCapability.JsMessageSender)
+                os.contains("win") -> setOf(SuiteCapability.MainFrameOnlyJsBridge)
+                else -> emptySet()
+            }
         }
 
 private val desktopCapabilities =

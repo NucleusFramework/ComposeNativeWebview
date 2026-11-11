@@ -58,6 +58,30 @@ internal fun pageWithBridgeCallingFrame(tag: String): String {
 }
 
 /**
+ * A page embedding a sandboxed frame that calls the bridge and then tells the page it did;
+ * the page answers with a bridge call of its own. So the page's call arriving means the
+ * frame's was made before it.
+ */
+internal fun pageAnsweringBridgeCallingFrame(tag: String): String {
+    val frame =
+        "<script>window.kmpJsBridge.callNative('suiteSender'," +
+            "JSON.stringify({from:'frame'}),function(d){});" +
+            "window.parent.postMessage('frame-called','*');</script>"
+    return """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>AnsweredFrame</title></head>
+    <body><div id="marker">$tag</div>
+    <script>
+      window.addEventListener('message', function (e) {
+        if (e.data !== 'frame-called') { return; }
+        window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from: 'main'}), function (d) {});
+      });
+    </script>
+    <iframe sandbox="allow-scripts" srcdoc="${frame.replace("\"", "&quot;")}"></iframe>
+    </body></html>
+    """.trimIndent()
+}
+
+/**
  * Calls the JS bridge from an inline script, i.e. while the document is still
  * parsing, and records in `window.__earlyBridge` whether the bridge was there.
  *

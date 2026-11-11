@@ -49,6 +49,12 @@ enum class SuiteCapability {
      * reports it. macOS desktop only so far.
      */
     JsMessageSender,
+
+    /**
+     * The engine hands the bridge the messages of the top-level document only, so
+     * every message is the main frame's; its origin is not reported. Windows desktop.
+     */
+    MainFrameOnlyJsBridge,
 }
 
 expect fun suiteCapabilities(): Set<SuiteCapability>

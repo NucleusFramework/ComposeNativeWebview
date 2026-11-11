@@ -407,6 +407,23 @@ internal suspend fun runFullSuite(
             "sender=$sender",
         )
     }
+    case("B14", required = setOf(SuiteCapability.MainFrameOnlyJsBridge)) {
+        val senders = collectSenders(ctx, expect = "main-again") { received ->
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b14", pageAnsweringBridgeCallingFrame("sender-b14"))
+            // The page answers the frame's call, and one more round trip follows it: a
+            // message of the frame's that the engine did deliver would be here by then.
+            awaitUntil(12_000, "suiteSender from main") { received.containsKey("main") }
+            evalJs(
+                ctx.navigator,
+                "window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from:'main-again'}), function(d){}); 's'",
+            )
+        }
+        val main = JsMessageSender(origin = null, isMainFrame = true)
+        assertThat(
+            senders == mapOf("main" to main, "main-again" to main),
+            "senders=$senders",
+        )
+    }
 
     // ── Cookies ──────────────────────────────────────────────────────
     case("K01", required = setOf(SuiteCapability.CookieDomainApi)) {
@@ -780,11 +797,12 @@ private const val MIN_ANIMATING_FPS = 10
 /**
  * Runs [send] with a `suiteSender` handler registered and returns the sender of each
  * message it received, keyed by the message's `from` param, once [expect] has arrived.
+ * [send] is given the senders as they arrive.
  */
 private suspend fun collectSenders(
     ctx: SuiteContext,
     expect: String = "main",
-    send: suspend () -> Unit,
+    send: suspend (received: Map<String, JsMessageSender?>) -> Unit,
 ): Map<String, JsMessageSender?> {
     val senders = mutableMapOf<String, JsMessageSender?>()
     val handler =
@@ -796,13 +814,13 @@ private suspend fun collectSenders(
                 navigator: WebViewNavigator?,
                 callback: (String) -> Unit,
             ) {
-                val from = if (message.params.contains("frame")) "frame" else "main"
+                val from = Regex("\"from\":\"([^\"]*)\"").find(message.params)?.groupValues?.get(1) ?: return
                 senders[from] = message.sender
             }
         }
     ctx.jsBridge.register(handler)
     try {
-        send()
+        send(senders)
         awaitUntil(12_000, "suiteSender from $expect") { senders.containsKey(expect) }
     } finally {
         ctx.jsBridge.unregister(handler)

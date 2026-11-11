@@ -2,6 +2,8 @@ package dev.nucleusframework.webview.web.windows
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.nucleusframework.webview.jsbridge.JsMessageSender
+import dev.nucleusframework.webview.web.NativeIpcMessage
 import dev.nucleusframework.webview.web.NativeWebView
 import dev.nucleusframework.window.tao.NucleusPlatformView
 import kotlinx.coroutines.CompletableDeferred
@@ -171,6 +173,16 @@ class WindowsWebView2NativeWebView(
 
     override fun drainIpcMessages(): List<String> =
         if (!isReady()) emptyList() else WebView2WindowsBridge.drainIpcMessages(handle)
+
+    /**
+     * WebView2 raises the view's `WebMessageReceived` for the top-level document only: a
+     * frame's `chrome.webview.postMessage` goes to an event of that frame, which this backend
+     * does not subscribe to. So every message is the main frame's. Its origin stays unknown:
+     * the event names the document's URL, and a URL does not settle an origin (a sandboxed
+     * document's is opaque).
+     */
+    override fun drainIpcMessagesWithSender(): List<NativeIpcMessage> =
+        drainIpcMessages().map { NativeIpcMessage(it, JsMessageSender(origin = null, isMainFrame = true)) }
 
     override fun addNavigateListener(listener: (String) -> Boolean) {
         if (!isReady()) return
