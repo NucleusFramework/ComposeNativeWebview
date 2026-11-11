@@ -98,7 +98,7 @@ std::wstring compose_webview_utf8_to_wide(const std::string &u);
 std::string compose_webview_json_escape(const std::string &s);
 
 ComposeWebViewState *compose_webview_state_from_handle(jlong handle);
-void compose_webview_pump_until_done(const std::atomic<bool> &done);
+void compose_webview_pump_until_done(const std::vector<HWND> &before, const std::atomic<bool> &done);
 void compose_webview_apply_bounds(ComposeWebViewState &s);
 void compose_webview_apply_rounded_clip(ComposeWebViewState &s);
 
