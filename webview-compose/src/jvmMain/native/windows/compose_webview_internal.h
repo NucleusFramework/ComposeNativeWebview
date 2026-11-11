@@ -37,9 +37,11 @@ struct ComposeWebViewState {
     ComPtr<ICoreWebView2_2> webview2;
     ComPtr<ICoreWebView2CookieManager> cookieManager;
 
+    /* The device of the host window's composition tree, shared by the views in that window, and this
+     * view's own visual in the tree. */
     ComPtr<IDCompositionDevice> dcompDevice;
-    ComPtr<IDCompositionTarget> dcompTarget;
     ComPtr<IDCompositionVisual> rootVisual;
+    bool inWindowTree = false;
 
     int xPx = 0;
     int yPx = 0;

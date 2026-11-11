@@ -155,6 +155,61 @@ static void logCreateFailure(const char *step, HRESULT hr) {
     fflush(stderr);
 }
 
+/*
+ * The DirectComposition tree of one host window. A window takes a single topmost composition target,
+ * so the views in it share this one, each with a visual of its own under [root]. Touched on the
+ * window's UI thread only, where views are created and released.
+ */
+struct WindowTree {
+    ComPtr<IDCompositionDevice> device;
+    ComPtr<IDCompositionTarget> target;
+    ComPtr<IDCompositionVisual> root;
+    int views = 0;
+};
+static std::unordered_map<HWND, WindowTree> g_windowTrees;
+
+/* Gives [s] its visual in its window's tree, which the window's first view creates. */
+static HRESULT joinWindowTree(ComposeWebViewState *s) {
+    auto it = g_windowTrees.find(s->parent);
+    if (it == g_windowTrees.end()) {
+        WindowTree tree;
+        HRESULT hr = DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&tree.device));
+        if (SUCCEEDED(hr)) hr = tree.device->CreateTargetForHwnd(s->parent, TRUE, &tree.target);
+        if (SUCCEEDED(hr)) hr = tree.device->CreateVisual(&tree.root);
+        if (SUCCEEDED(hr)) hr = tree.target->SetRoot(tree.root.Get());
+        if (FAILED(hr)) return hr;
+        it = g_windowTrees.emplace(s->parent, std::move(tree)).first;
+    }
+    WindowTree &tree = it->second;
+    ComPtr<IDCompositionVisual> visual;
+    HRESULT hr = tree.device->CreateVisual(&visual);
+    if (SUCCEEDED(hr)) hr = tree.root->AddVisual(visual.Get(), TRUE, nullptr);
+    if (FAILED(hr)) {
+        if (tree.views == 0) g_windowTrees.erase(it);
+        return hr;
+    }
+    tree.views++;
+    s->dcompDevice = tree.device;
+    s->rootVisual = visual;
+    s->inWindowTree = true;
+    return S_OK;
+}
+
+/* Takes [s]'s visual out of its window's tree; the window's last view takes the tree with it. */
+static void leaveWindowTree(ComposeWebViewState *s) {
+    if (!s->inWindowTree) return;
+    s->inWindowTree = false;
+    auto it = g_windowTrees.find(s->parent);
+    if (it == g_windowTrees.end()) return;
+    WindowTree &tree = it->second;
+    if (s->rootVisual) tree.root->RemoveVisual(s->rootVisual.Get());
+    if (--tree.views <= 0) {
+        g_windowTrees.erase(it);
+    } else {
+        tree.device->Commit();
+    }
+}
+
 void compose_webview_apply_rounded_clip(ComposeWebViewState &s) {
     if (!s.dcompDevice || !s.rootVisual) return;
     if (s.cornerRadiusPx <= 0.0f) {
@@ -340,10 +395,12 @@ ComposeWebViewState *compose_webview_create(
     }
 
     if (FAILED(s->compController.As(&s->controller)) || !s->controller) {
+        logCreateFailure("getting the controller", E_NOINTERFACE);
         delete s;
         return nullptr;
     }
     if (FAILED(s->controller->get_CoreWebView2(&s->webview)) || !s->webview) {
+        logCreateFailure("getting the web view", E_FAIL);
         delete s;
         return nullptr;
     }
@@ -392,14 +449,16 @@ ComposeWebViewState *compose_webview_create(
         s->controller->put_ZoomFactor(opts.zoomLevel);
     }
 
-    if (FAILED(DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&s->dcompDevice))) ||
-        FAILED(s->dcompDevice->CreateTargetForHwnd(parent, TRUE, &s->dcompTarget)) ||
-        FAILED(s->dcompDevice->CreateVisual(&s->rootVisual))) {
+    hr = joinWindowTree(s);
+    if (FAILED(hr)) {
+        logCreateFailure("joining the window's composition tree", hr);
         delete s;
         return nullptr;
     }
-    s->dcompTarget->SetRoot(s->rootVisual.Get());
-    if (FAILED(s->compController->put_RootVisualTarget(s->rootVisual.Get()))) {
+    hr = s->compController->put_RootVisualTarget(s->rootVisual.Get());
+    if (FAILED(hr)) {
+        logCreateFailure("setting the view's root visual", hr);
+        leaveWindowTree(s);
         delete s;
         return nullptr;
     }
@@ -458,6 +517,7 @@ void compose_webview_release(ComposeWebViewState *s) {
     compose_webview_uninstall_parent_subclass(s);
     compose_webview_unhook_events(s);
     if (s->controller) s->controller->Close();
+    leaveWindowTree(s);
     delete s;
 }
 
