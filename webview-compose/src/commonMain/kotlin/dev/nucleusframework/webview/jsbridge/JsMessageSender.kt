@@ -8,7 +8,10 @@ package dev.nucleusframework.webview.jsbridge
  * embedded third-party frame can call the same handlers as the page that embeds it.
  *
  * What the desktop engines report:
- *  - macOS (WKWebView): both properties, for every frame.
+ *  - macOS (WKWebView) and Linux (WebKitGTK): both properties, for every frame. On Linux a
+ *    message has no sender at all when the page posts it to the WebKit message handler
+ *    itself instead of through the bridge, or between a `document.open()` and the document
+ *    it then writes.
  *  - Windows (WebView2): only the top-level document's messages reach the bridge, so
  *    [isMainFrame] is always true there, and [origin] is not reported.
  *

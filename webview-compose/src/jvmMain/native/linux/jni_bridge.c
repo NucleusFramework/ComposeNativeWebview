@@ -39,7 +39,7 @@ void compose_webview_ensure_bridge_methods(JNIEnv *env) {
     g_on_navigate = (*env)->GetStaticMethodID(
         env, g_bridge_class, "nativeOnNavigate", "(JLjava/lang/String;)Z");
     g_on_ipc = (*env)->GetStaticMethodID(
-        env, g_bridge_class, "nativeOnIpcMessage", "(JLjava/lang/String;)V");
+        env, g_bridge_class, "nativeOnIpcMessage", "(JLjava/lang/String;Ljava/lang/String;Z)V");
     g_on_js_result = (*env)->GetStaticMethodID(
         env, g_bridge_class, "nativeOnJsResult", "(JLjava/lang/String;)V");
     g_on_cookies = (*env)->GetStaticMethodID(

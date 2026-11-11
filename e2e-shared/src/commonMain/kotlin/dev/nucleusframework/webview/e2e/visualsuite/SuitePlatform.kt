@@ -46,7 +46,7 @@ enum class SuiteCapability {
 
     /**
      * Bridge messages carry the sender (origin, main frame or not) as the engine
-     * reports it. macOS desktop only so far.
+     * reports it. macOS and Linux desktop.
      */
     JsMessageSender,
 

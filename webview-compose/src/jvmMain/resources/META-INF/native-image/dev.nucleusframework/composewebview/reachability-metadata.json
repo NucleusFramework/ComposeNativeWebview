@@ -7,7 +7,7 @@
       "allDeclaredFields": true,
       "methods": [
         { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
-        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String", "java.lang.String", "boolean"] },
         { "name": "nativeOnJsResult", "parameterTypes": ["long", "java.lang.String"] },
         { "name": "nativeOnCookiesResult", "parameterTypes": ["long", "java.lang.String"] },
         { "name": "nativeOnScreenshotResult", "parameterTypes": ["long", "byte[]"] }
@@ -110,7 +110,7 @@
       "type": "dev.nucleusframework.webview.web.linux.WebKitLinuxBridge",
       "methods": [
         { "name": "nativeOnNavigate", "parameterTypes": ["long", "java.lang.String"] },
-        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String"] },
+        { "name": "nativeOnIpcMessage", "parameterTypes": ["long", "java.lang.String", "java.lang.String", "boolean"] },
         { "name": "nativeOnJsResult", "parameterTypes": ["long", "java.lang.String"] },
         { "name": "nativeOnCookiesResult", "parameterTypes": ["long", "java.lang.String"] },
         { "name": "nativeOnScreenshotResult", "parameterTypes": ["long", "byte[]"] }

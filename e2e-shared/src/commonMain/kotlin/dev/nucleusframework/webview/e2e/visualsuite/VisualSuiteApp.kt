@@ -108,6 +108,7 @@ fun VisualSuiteApp(
             baseUrl = "https://suite.local/boot",
         ).also {
             it.webSettings.desktopWebSettings.transparent = false
+            it.webSettings.desktopWebSettings.initScript = SUITE_INIT_SCRIPT
             it.webSettings.backgroundColor = Color.White
             it.webSettings.isJavaScriptEnabled = true
         }

@@ -1,6 +1,8 @@
 package dev.nucleusframework.webview.web.linux
 
 import dev.nucleusframework.core.runtime.NativeLibraryLoader
+import dev.nucleusframework.webview.jsbridge.JsMessageSender
+import dev.nucleusframework.webview.web.NativeIpcMessage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
@@ -24,7 +26,7 @@ internal object WebKitLinuxBridge {
     private val navigateHandlers =
         ConcurrentHashMap<Long, MutableList<(String) -> Boolean>>()
     private val ipcQueues =
-        ConcurrentHashMap<Long, ConcurrentLinkedQueue<String>>()
+        ConcurrentHashMap<Long, ConcurrentLinkedQueue<NativeIpcMessage>>()
     private val jsCallbacks =
         ConcurrentHashMap<Long, ConcurrentLinkedQueue<(String) -> Unit>>()
     private val cookieDeferreds =
@@ -42,9 +44,9 @@ internal object WebKitLinuxBridge {
         navigateHandlers[handle]?.remove(listener)
     }
 
-    fun drainIpcMessages(handle: Long): List<String> {
+    fun drainIpcMessages(handle: Long): List<NativeIpcMessage> {
         val queue = ipcQueues[handle] ?: return emptyList()
-        val drained = ArrayList<String>()
+        val drained = ArrayList<NativeIpcMessage>()
         while (true) {
             val next = queue.poll() ?: break
             drained += next
@@ -86,9 +88,14 @@ internal object WebKitLinuxBridge {
         return handlers.any { it(url) }
     }
 
+    /**
+     * [origin] and [isMainFrame] are what the relay script read about the document that sent
+     * [message]; [origin] is null for a message that did not come through the relay.
+     */
     @JvmStatic
-    fun nativeOnIpcMessage(handle: Long, message: String) {
-        ipcQueues.getOrPut(handle) { ConcurrentLinkedQueue() }.add(message)
+    fun nativeOnIpcMessage(handle: Long, message: String, origin: String?, isMainFrame: Boolean) {
+        val sender = origin?.let { JsMessageSender(origin = it, isMainFrame = isMainFrame) }
+        ipcQueues.getOrPut(handle) { ConcurrentLinkedQueue() }.add(NativeIpcMessage(message, sender))
     }
 
     @JvmStatic

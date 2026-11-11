@@ -54,6 +54,9 @@ internal fun suiteCatalog(): List<SuiteCase> =
         SuiteCase("B12", "JS Bridge", "message sender: origin of the main frame"),
         SuiteCase("B13", "JS Bridge", "message sender: embedded frame is not the main frame"),
         SuiteCase("B14", "JS Bridge", "message sender: only the main frame reaches the bridge"),
+        SuiteCase("B15", "JS Bridge", "message sender: a frame cannot pass for the main frame"),
+        SuiteCase("B16", "JS Bridge", "bridge call still arrives after document.open()"),
+        SuiteCase("B17", "JS Bridge", "message sender: a call the init script makes at document start"),
         // Cookies (Wry: set/get/clear_for_url/clear_all + attributes)
         SuiteCase("K01", "Cookies", "setCookie + getCookies finds cookie"),
         SuiteCase("K02", "Cookies", "removeCookies drops cookie"),
