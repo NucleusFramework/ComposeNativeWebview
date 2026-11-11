@@ -4,6 +4,7 @@ import composewebview.e2e_shared.generated.resources.Res
 import dev.nucleusframework.webview.cookie.Cookie
 import dev.nucleusframework.webview.jsbridge.IJsMessageHandler
 import dev.nucleusframework.webview.jsbridge.JsMessage
+import dev.nucleusframework.webview.jsbridge.JsMessageSender
 import dev.nucleusframework.webview.web.LoadingState
 import dev.nucleusframework.webview.web.WebContent
 import dev.nucleusframework.webview.web.WebViewFileReadType
@@ -382,6 +383,93 @@ internal suspend fun runFullSuite(
             }
         }
     }
+    case("B12", required = setOf(SuiteCapability.JsMessageSender)) {
+        val senders = collectSenders(ctx) {
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b12")
+            evalJs(
+                ctx.navigator,
+                "window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from:'main'}), function(d){}); 's'",
+            )
+        }
+        val sender = senders["main"]
+        assertThat(
+            sender == JsMessageSender(origin = "https://suite.local", isMainFrame = true),
+            "sender=$sender",
+        )
+    }
+    case("B13", required = setOf(SuiteCapability.JsMessageSender)) {
+        val senders = collectSenders(ctx, expect = "frame") {
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b13", pageWithBridgeCallingFrame("sender-b13"))
+        }
+        val sender = senders["frame"]
+        assertThat(
+            sender == JsMessageSender(origin = "null", isMainFrame = false),
+            "sender=$sender",
+        )
+    }
+    case("B14", required = setOf(SuiteCapability.MainFrameOnlyJsBridge)) {
+        val senders = collectSenders(ctx, expect = "main-again") { received ->
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b14", pageAnsweringBridgeCallingFrame("sender-b14"))
+            // The page answers the frame's call, and one more round trip follows it: a
+            // message of the frame's that the engine did deliver would be here by then.
+            awaitUntil(12_000, "suiteSender from main") { received.containsKey("main") }
+            evalJs(
+                ctx.navigator,
+                "window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from:'main-again'}), function(d){}); 's'",
+            )
+        }
+        val main = JsMessageSender(origin = null, isMainFrame = true)
+        assertThat(
+            senders == mapOf("main" to main, "main-again" to main),
+            "senders=$senders",
+        )
+    }
+    case("B15", required = setOf(SuiteCapability.JsMessageSender)) {
+        val senders = collectSenders(ctx, expect = "frame") {
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b15", pageWithSenderForgingFrame("sender-b15"))
+        }
+        // Only what the frame sent through its own bridge arrives, and as the frame's.
+        val frame = JsMessageSender(origin = "null", isMainFrame = false)
+        assertThat(
+            senders == mapOf("forged-fields" to frame, "frame" to frame),
+            "senders=$senders",
+        )
+    }
+    case("B16", required = setOf(SuiteCapability.DocumentStartJsBridge)) {
+        // document.open() drops every listener on the window but keeps its script objects,
+        // the bridge among them: a call made before the rewritten document exists and one
+        // made after it must both arrive.
+        loadHtmlAwaitMarker(ctx.navigator, "reopen-b16")
+        ctx.clearBridgeHits()
+        evalJs(
+            ctx.navigator,
+            """
+            (function(){
+              document.open();
+              window.kmpJsBridge.callNative('suitePing', JSON.stringify({reopen:'b16-opened'}), function(d){});
+              document.write('<!DOCTYPE html><html><body><div id="marker">reopened-b16</div></body></html>');
+              document.close();
+              window.kmpJsBridge.callNative('suitePing', JSON.stringify({reopen:'b16-written'}), function(d){});
+              return 'reopened';
+            })()
+            """.trimIndent(),
+        )
+        awaitUntil(12_000, "pings around document.open()") {
+            ctx.bridgeHits.any { it.contains("b16-opened") } && ctx.bridgeHits.any { it.contains("b16-written") }
+        }
+    }
+    case("B17", required = setOf(SuiteCapability.JsMessageSender)) {
+        // SUITE_INIT_SCRIPT calls the bridge before anything else in the document has run.
+        val page = "https://suite.local/sender-b17"
+        val senders = collectSenders(ctx, expect = page, method = "suiteEarly") {
+            loadHtmlAwaitMarker(ctx.navigator, "sender-b17")
+        }
+        val sender = senders[page]
+        assertThat(
+            sender == JsMessageSender(origin = "https://suite.local", isMainFrame = true),
+            "sender=$sender",
+        )
+    }
 
     // ── Cookies ──────────────────────────────────────────────────────
     case("K01", required = setOf(SuiteCapability.CookieDomainApi)) {
@@ -751,3 +839,38 @@ internal suspend fun runFullSuite(
  * (CI runners render in software).
  */
 private const val MIN_ANIMATING_FPS = 10
+
+/**
+ * Runs [send] with a handler registered for [method] and returns the sender of each
+ * message it received, keyed by the message's `from` param, once [expect] has arrived.
+ * [send] is given the senders as they arrive.
+ */
+private suspend fun collectSenders(
+    ctx: SuiteContext,
+    expect: String = "main",
+    method: String = "suiteSender",
+    send: suspend (received: Map<String, JsMessageSender?>) -> Unit,
+): Map<String, JsMessageSender?> {
+    val senders = mutableMapOf<String, JsMessageSender?>()
+    val handler =
+        object : IJsMessageHandler {
+            override fun methodName() = method
+
+            override fun handle(
+                message: JsMessage,
+                navigator: WebViewNavigator?,
+                callback: (String) -> Unit,
+            ) {
+                val from = Regex("\"from\":\"([^\"]*)\"").find(message.params)?.groupValues?.get(1) ?: return
+                senders[from] = message.sender
+            }
+        }
+    ctx.jsBridge.register(handler)
+    try {
+        send(senders)
+        awaitUntil(12_000, "$method from $expect") { senders.containsKey(expect) }
+    } finally {
+        ctx.jsBridge.unregister(handler)
+    }
+    return senders
+}

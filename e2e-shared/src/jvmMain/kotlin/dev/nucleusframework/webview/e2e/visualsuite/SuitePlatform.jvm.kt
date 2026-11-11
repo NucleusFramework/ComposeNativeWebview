@@ -14,6 +14,14 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 
 actual fun suiteCapabilities(): Set<SuiteCapability> =
+    desktopCapabilities +
+        if (System.getProperty("os.name", "").lowercase(Locale.ENGLISH).contains("win")) {
+            setOf(SuiteCapability.MainFrameOnlyJsBridge)
+        } else {
+            setOf(SuiteCapability.JsMessageSender)
+        }
+
+private val desktopCapabilities =
     setOf(
         SuiteCapability.HistoryNavigation,
         SuiteCapability.DataUrlNavigation,

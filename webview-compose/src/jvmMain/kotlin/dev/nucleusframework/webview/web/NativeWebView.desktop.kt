@@ -1,5 +1,7 @@
 package dev.nucleusframework.webview.web
 
+import dev.nucleusframework.webview.jsbridge.JsMessageSender
+
 /**
  * Desktop [NativeWebView] base.
  *
@@ -8,6 +10,12 @@ package dev.nucleusframework.webview.web
  *  - [dev.nucleusframework.webview.web.macos.MacOsWebKitNativeWebView] on macOS
  *  - [dev.nucleusframework.webview.web.windows.WindowsWebView2NativeWebView] on Windows
  */
+/** A raw page message and who sent it, as drained from a native backend. */
+data class NativeIpcMessage(
+    val body: String,
+    val sender: JsMessageSender?,
+)
+
 actual open class NativeWebView {
     open fun isReady(): Boolean = false
 
@@ -38,6 +46,13 @@ actual open class NativeWebView {
     }
 
     open fun drainIpcMessages(): List<String> = emptyList()
+
+    /**
+     * [drainIpcMessages] with the sender the engine reported for each message. Backends whose
+     * engine does not report one keep the default, which leaves every sender null.
+     */
+    open fun drainIpcMessagesWithSender(): List<NativeIpcMessage> =
+        drainIpcMessages().map { NativeIpcMessage(body = it, sender = null) }
 
     open fun addNavigateListener(listener: (String) -> Boolean) = Unit
 

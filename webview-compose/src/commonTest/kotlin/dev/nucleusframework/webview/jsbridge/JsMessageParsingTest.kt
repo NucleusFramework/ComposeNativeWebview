@@ -56,4 +56,32 @@ class JsMessageParsingTest {
     fun returnsNullWhenMethodMissing() {
         assertNull(parseJsMessage("""{"callbackId":1,"params":"{}"}"""))
     }
+
+    @Test
+    fun carriesTheSenderTheEngineReported() {
+        val raw = """{"callbackId":1,"methodName":"echo","params":"{}","type":"call"}"""
+        val sender = JsMessageSender(origin = "https://example.com", isMainFrame = false)
+
+        assertEquals(sender, parseJsMessage(raw, sender = sender)?.sender)
+    }
+
+    @Test
+    fun senderIsNullWhenTheEngineDoesNotReportOne() {
+        val raw = """{"callbackId":1,"methodName":"echo","params":"{}","type":"call"}"""
+
+        assertNull(parseJsMessage(raw)?.sender)
+    }
+
+    @Test
+    fun pageCannotSupplyItsOwnSender() {
+        val raw =
+            """
+            {"callbackId":1,"methodName":"echo","params":"{}","type":"call",
+             "sender":{"origin":"https://trusted.example","isMainFrame":true}}
+            """.trimIndent()
+
+        val message = parseJsMessage(raw)
+        assertNotNull(message)
+        assertNull(message.sender)
+    }
 }

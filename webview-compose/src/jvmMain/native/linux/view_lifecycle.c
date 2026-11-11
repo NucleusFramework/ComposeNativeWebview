@@ -1,5 +1,11 @@
 #include "compose_webview_internal.h"
 
+/* The relay's script world and message handler, and the events it trades with the page's shim. */
+#define IPC_RELAY_WORLD "nucleusIpcRelay"
+#define IPC_RELAY_HANDLER "nucleusIpcRelay"
+#define IPC_MESSAGE_EVENT "__nucleusIpcMessage"
+#define IPC_RELAY_STARTED_EVENT "__nucleusIpcRelayStarted"
+
 ComposeWebViewState *compose_webview_state_from_handle(jlong handle) {
     if (handle == 0) return NULL;
     return (ComposeWebViewState *) (uintptr_t) handle;
@@ -64,20 +70,47 @@ Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeCreate(
         state);
     webkit_user_content_manager_register_script_message_handler(state->ucm, "ipc");
 
-    /* Always inject a small window.ipc shim so the Kotlin JS bridge can attach. */
+    /*
+     * Always inject a small window.ipc shim so the Kotlin JS bridge can attach. It offers each
+     * message to the relay below, which takes a message by cancelling its event. WebKit starts
+     * the two scripts in no fixed order, so until the relay has started in a document, messages
+     * wait for it. After that, a message the relay does not take goes straight to the "ipc"
+     * handler and arrives without a sender: so it is between a page's document.open(), which
+     * removes the relay's listener, and the document the page then writes, where the relay
+     * starts again.
+     */
     const char *ipc_shim =
-        "if (typeof window.ipc === 'undefined') {"
+        "(function () {"
+        "  if (typeof window.ipc !== 'undefined') { return; }"
+        "  var dispatch = window.dispatchEvent.bind(window);"
+        "  var CustomEvent = window.CustomEvent;"
+        "  var waiting = [];"
+        "  function offer(body) {"
+        "    return !dispatch(new CustomEvent('" IPC_MESSAGE_EVENT "',"
+        "                                     { cancelable: true, detail: body }));"
+        "  }"
+        "  function post(body) {"
+        "    if (offer(body)) { return; }"
+        "    if (window.webkit && window.webkit.messageHandlers &&"
+        "        window.webkit.messageHandlers.ipc) {"
+        "      window.webkit.messageHandlers.ipc.postMessage(body);"
+        "    }"
+        "  }"
+        "  var relayStarted = offer(null);"
+        "  window.addEventListener('" IPC_RELAY_STARTED_EVENT "', function (e) {"
+        "    e.stopImmediatePropagation();"
+        "    relayStarted = true;"
+        "    var held = waiting;"
+        "    waiting = [];"
+        "    for (var i = 0; i < held.length; i++) { post(held[i]); }"
+        "  }, true);"
         "  window.ipc = {"
         "    postMessage: function(message) {"
-        "      if (window.webkit && window.webkit.messageHandlers &&"
-        "          window.webkit.messageHandlers.ipc) {"
-        "        window.webkit.messageHandlers.ipc.postMessage("
-        "          (typeof message === 'string') ? message : JSON.stringify(message)"
-        "        );"
-        "      }"
+        "      var body = (typeof message === 'string') ? message : JSON.stringify(message);"
+        "      if (relayStarted) { post(body); } else { waiting.push(body); }"
         "    }"
         "  };"
-        "}";
+        "})();";
     WebKitUserScript *shim = webkit_user_script_new(
         ipc_shim,
         WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES,
@@ -86,6 +119,48 @@ Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeCreate(
         NULL);
     webkit_user_content_manager_add_script(state->ucm, shim);
     webkit_user_script_unref(shim);
+
+    /*
+     * WebKitGTK reports nothing about who posted a script message, so the shim's messages go
+     * through this relay. It runs in every frame, in a script world of its own: the page's
+     * scripts share the DOM with it but none of its JavaScript objects, so they can neither
+     * reach the handler registered in that world nor change what the relay reads there. It
+     * stamps each message with the origin of its frame's document and whether that frame is
+     * the top one. A page reaches only the relay of its own frame, through an event on its
+     * `window`, which a document of another origin cannot dispatch.
+     */
+    const char *ipc_relay =
+        "(function () {"
+        "  var handlers = window.webkit && window.webkit.messageHandlers;"
+        "  var handler = handlers && handlers." IPC_RELAY_HANDLER ";"
+        "  if (!handler) { return; }"
+        "  var post = handler.postMessage.bind(handler);"
+        "  window.addEventListener('" IPC_MESSAGE_EVENT "', function (e) {"
+        "    e.stopImmediatePropagation();"
+        "    e.preventDefault();"
+        "    if (typeof e.detail === 'string') {"
+        "      post({ origin: window.origin, isMainFrame: window.top === window, body: e.detail });"
+        "    }"
+        "  }, true);"
+        "  window.dispatchEvent(new CustomEvent('" IPC_RELAY_STARTED_EVENT "'));"
+        "})();";
+    /* Connect BEFORE register, as for "ipc" above. */
+    state->ipc_relay_handler = g_signal_connect(
+        state->ucm,
+        "script-message-received::" IPC_RELAY_HANDLER,
+        G_CALLBACK(compose_webview_on_relayed_script_message),
+        state);
+    webkit_user_content_manager_register_script_message_handler_in_world(
+        state->ucm, IPC_RELAY_HANDLER, IPC_RELAY_WORLD);
+    WebKitUserScript *relay = webkit_user_script_new_for_world(
+        ipc_relay,
+        WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES,
+        WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START,
+        IPC_RELAY_WORLD,
+        NULL,
+        NULL);
+    webkit_user_content_manager_add_script(state->ucm, relay);
+    webkit_user_script_unref(relay);
 
     /*
      * JS bridge object, built once in Kotlin. Injected at document start so
@@ -229,6 +304,10 @@ Java_dev_nucleusframework_webview_web_linux_WebKitLinuxBridge_nativeRelease(
         if (state->ipc_handler != 0) {
             g_signal_handler_disconnect(state->ucm, state->ipc_handler);
             state->ipc_handler = 0;
+        }
+        if (state->ipc_relay_handler != 0) {
+            g_signal_handler_disconnect(state->ucm, state->ipc_relay_handler);
+            state->ipc_relay_handler = 0;
         }
         g_object_unref(state->ucm);
         state->ucm = NULL;

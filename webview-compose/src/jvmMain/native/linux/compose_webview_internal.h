@@ -23,6 +23,7 @@ typedef struct {
     WebKitWebContext *context;
     gulong decide_policy_handler;
     gulong ipc_handler;
+    gulong ipc_relay_handler;
 } ComposeWebViewState;
 
 /* jni_bridge.c */
@@ -46,6 +47,10 @@ gboolean compose_webview_on_decide_policy(
     WebKitPolicyDecisionType type,
     gpointer user_data);
 void compose_webview_on_script_message(
+    WebKitUserContentManager *manager,
+    WebKitJavascriptResult *js_result,
+    gpointer user_data);
+void compose_webview_on_relayed_script_message(
     WebKitUserContentManager *manager,
     WebKitJavascriptResult *js_result,
     gpointer user_data);

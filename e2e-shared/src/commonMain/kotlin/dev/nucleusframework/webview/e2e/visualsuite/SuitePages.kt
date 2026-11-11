@@ -42,6 +42,96 @@ internal fun pageWithMarker(marker: String, title: String = "SUITE"): String =
     """.trimIndent()
 
 /**
+ * The suite view's init script. It runs ahead of everything else in each document and calls
+ * the bridge at once, which makes its call the earliest message a page can send (case B17).
+ */
+internal const val SUITE_INIT_SCRIPT =
+    "window.kmpJsBridge.callNative('suiteEarly', JSON.stringify({from: location.href}));"
+
+/**
+ * A page embedding a sandboxed frame that calls the bridge on its own. The frame's
+ * origin is opaque, so the engine must report it as `"null"` and not as the embedder's.
+ */
+internal fun pageWithBridgeCallingFrame(tag: String): String {
+    val frame =
+        "<script>window.kmpJsBridge.callNative('suiteSender'," +
+            "JSON.stringify({from:'frame'}),function(d){});</script>"
+    return """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>FrameSender</title></head>
+    <body><div id="marker">$tag</div>
+    <iframe sandbox="allow-scripts" srcdoc="${frame.replace("\"", "&quot;")}"></iframe>
+    </body></html>
+    """.trimIndent()
+}
+
+/**
+ * A page embedding a sandboxed frame that calls the bridge and then tells the page it did;
+ * the page answers with a bridge call of its own. So the page's call arriving means the
+ * frame's was made before it.
+ */
+internal fun pageAnsweringBridgeCallingFrame(tag: String): String {
+    val frame =
+        "<script>window.kmpJsBridge.callNative('suiteSender'," +
+            "JSON.stringify({from:'frame'}),function(d){});" +
+            "window.parent.postMessage('frame-called','*');</script>"
+    return """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>AnsweredFrame</title></head>
+    <body><div id="marker">$tag</div>
+    <script>
+      window.addEventListener('message', function (e) {
+        if (e.data !== 'frame-called') { return; }
+        window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from: 'main'}), function (d) {});
+      });
+    </script>
+    <iframe sandbox="allow-scripts" srcdoc="${frame.replace("\"", "&quot;")}"></iframe>
+    </body></html>
+    """.trimIndent()
+}
+
+/**
+ * A page embedding a sandboxed frame that tries every way it has to send a bridge message
+ * as the embedding page before sending one of its own: the handler and the event of the
+ * Linux backend's relay, the embedder's own `ipc`, and a message that names its sender.
+ */
+internal fun pageWithSenderForgingFrame(tag: String): String {
+    val frame =
+        """
+        <script>
+        (function () {
+          function message(from, extra) {
+            var m = extra || {};
+            m.methodName = 'suiteSender';
+            m.params = JSON.stringify({from: from});
+            m.callbackId = -1;
+            return JSON.stringify(m);
+          }
+          try {
+            window.webkit.messageHandlers.nucleusIpcRelay.postMessage(
+              {origin: 'https://suite.local', isMainFrame: true, body: message('forged-handler')});
+          } catch (e) {}
+          try {
+            window.top.dispatchEvent(new CustomEvent(
+              '__nucleusIpcMessage', {cancelable: true, detail: message('forged-event')}));
+          } catch (e) {}
+          try { window.top.ipc.postMessage(message('forged-embedder')); } catch (e) {}
+          window.ipc.postMessage(message('forged-fields', {
+            origin: 'https://suite.local',
+            isMainFrame: true,
+            sender: {origin: 'https://suite.local', isMainFrame: true}
+          }));
+          window.kmpJsBridge.callNative('suiteSender', JSON.stringify({from: 'frame'}), function (d) {});
+        })();
+        </script>
+        """.trimIndent()
+    return """
+    <!DOCTYPE html><html><head><meta charset="utf-8"><title>ForgingFrame</title></head>
+    <body><div id="marker">$tag</div>
+    <iframe sandbox="allow-scripts" srcdoc="${frame.replace("\"", "&quot;")}"></iframe>
+    </body></html>
+    """.trimIndent()
+}
+
+/**
  * Calls the JS bridge from an inline script, i.e. while the document is still
  * parsing, and records in `window.__earlyBridge` whether the bridge was there.
  *
