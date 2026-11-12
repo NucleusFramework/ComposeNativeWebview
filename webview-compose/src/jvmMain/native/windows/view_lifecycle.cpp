@@ -1,5 +1,6 @@
 #include "compose_webview_internal.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <unordered_map>
 
@@ -70,12 +71,142 @@ ComposeWebViewState *compose_webview_unregister(jlong handle) {
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 
-void compose_webview_pump_until_done(const std::atomic<bool> &done) {
+/* The module WebView2's objects come from, known once it has handed one over. */
+static HMODULE g_engineModule = nullptr;
+
+/* The module holding [address]. */
+static HMODULE moduleAt(const void *address) {
+    HMODULE module = nullptr;
+    if (!address) return nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(address), &module);
+    return module;
+}
+
+static BOOL CALLBACK addWindow(HWND window, LPARAM windows) {
+    reinterpret_cast<std::vector<HWND> *>(windows)->push_back(window);
+    return TRUE;
+}
+
+/* The calling thread's windows: its top-level ones, those inside them, and its message-only ones. */
+static std::vector<HWND> threadWindows() {
+    const DWORD thread = GetCurrentThreadId();
+    std::vector<HWND> windows;
+    EnumThreadWindows(thread, addWindow, reinterpret_cast<LPARAM>(&windows));
+    const size_t topLevel = windows.size();
+    for (size_t i = 0; i < topLevel; i++) {
+        EnumChildWindows(windows[i], addWindow, reinterpret_cast<LPARAM>(&windows));
+    }
+    for (HWND w = nullptr; (w = FindWindowExW(HWND_MESSAGE, w, nullptr, nullptr)) != nullptr;) {
+        windows.push_back(w);
+    }
+    windows.erase(
+        std::remove_if(windows.begin(), windows.end(), [thread](HWND w) {
+            return GetWindowThreadProcessId(w, nullptr) != thread;
+        }),
+        windows.end());
+    return windows;
+}
+
+/*
+ * Whether [window] is one of WebView2's: of a class whose procedure is in WebView2's module. Until
+ * its first environment tells which module that is, a window is WebView2's when the call being
+ * waited on made it, so it is not among [before], the thread's windows from before that call.
+ */
+static bool isEngineWindow(HWND window, const std::vector<HWND> &before) {
+    if (g_engineModule) {
+        const ULONG_PTR classProcedure = GetClassLongPtrW(window, GCLP_WNDPROC);
+        return moduleAt(reinterpret_cast<const void *>(classProcedure)) == g_engineModule;
+    }
+    return std::find(before.begin(), before.end(), window) == before.end();
+}
+
+/*
+ * Waits until [done]: WebView2 finishes an asynchronous call through the calling thread's message
+ * queue. Only what is queued for WebView2's own windows is dispatched meanwhile. Everything else on
+ * the thread is the host's and stays queued for its loop. The host is in the middle of the call
+ * that waits here, and can only half act on a message handed to it now: its handlers would run
+ * inside that call, and its event loop sets aside a wake-up or a request to redraw it receives
+ * while busy, then sleeps waiting for the one that was taken off the queue here.
+ */
+void compose_webview_pump_until_done(const std::vector<HWND> &before, const std::atomic<bool> &done) {
+    const HWND threadMessages = reinterpret_cast<HWND>(static_cast<LONG_PTR>(-1));
     while (!done.load(std::memory_order_acquire)) {
+        bool dispatched = false;
         MSG msg;
-        if (GetMessageW(&msg, nullptr, 0, 0) <= 0) break;
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+        /* Takes nothing off the queue: a call into it is what lets through what other threads sent. */
+        PeekMessageW(&msg, threadMessages, 0, 0, PM_NOREMOVE);
+        for (HWND window : threadWindows()) {
+            if (!isEngineWindow(window, before)) continue;
+            while (PeekMessageW(&msg, window, 0, 0, PM_REMOVE)) {
+                DispatchMessageW(&msg);
+                dispatched = true;
+                if (done.load(std::memory_order_acquire)) return;
+            }
+        }
+        if (!dispatched) MsgWaitForMultipleObjectsEx(0, nullptr, 5, QS_ALLINPUT, 0);
+    }
+}
+
+/* Says on stderr which step of creating a view failed, and with what result. */
+static void logCreateFailure(const char *step, HRESULT hr) {
+    fprintf(stderr, "compose_webview: %s failed: 0x%08lX\n", step, static_cast<unsigned long>(hr));
+    fflush(stderr);
+}
+
+/*
+ * The DirectComposition tree of one host window. A window takes a single topmost composition target,
+ * so the views in it share this one, each with a visual of its own under [root]. Touched on the
+ * window's UI thread only, where views are created and released.
+ */
+struct WindowTree {
+    ComPtr<IDCompositionDevice> device;
+    ComPtr<IDCompositionTarget> target;
+    ComPtr<IDCompositionVisual> root;
+    int views = 0;
+};
+static std::unordered_map<HWND, WindowTree> g_windowTrees;
+
+/* Gives [s] its visual in its window's tree, which the window's first view creates. */
+static HRESULT joinWindowTree(ComposeWebViewState *s) {
+    auto it = g_windowTrees.find(s->parent);
+    if (it == g_windowTrees.end()) {
+        WindowTree tree;
+        HRESULT hr = DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&tree.device));
+        if (SUCCEEDED(hr)) hr = tree.device->CreateTargetForHwnd(s->parent, TRUE, &tree.target);
+        if (SUCCEEDED(hr)) hr = tree.device->CreateVisual(&tree.root);
+        if (SUCCEEDED(hr)) hr = tree.target->SetRoot(tree.root.Get());
+        if (FAILED(hr)) return hr;
+        it = g_windowTrees.emplace(s->parent, std::move(tree)).first;
+    }
+    WindowTree &tree = it->second;
+    ComPtr<IDCompositionVisual> visual;
+    HRESULT hr = tree.device->CreateVisual(&visual);
+    if (SUCCEEDED(hr)) hr = tree.root->AddVisual(visual.Get(), TRUE, nullptr);
+    if (FAILED(hr)) {
+        if (tree.views == 0) g_windowTrees.erase(it);
+        return hr;
+    }
+    tree.views++;
+    s->dcompDevice = tree.device;
+    s->rootVisual = visual;
+    s->inWindowTree = true;
+    return S_OK;
+}
+
+/* Takes [s]'s visual out of its window's tree; the window's last view takes the tree with it. */
+static void leaveWindowTree(ComposeWebViewState *s) {
+    if (!s->inWindowTree) return;
+    s->inWindowTree = false;
+    auto it = g_windowTrees.find(s->parent);
+    if (it == g_windowTrees.end()) return;
+    WindowTree &tree = it->second;
+    if (s->rootVisual) tree.root->RemoveVisual(s->rootVisual.Get());
+    if (--tree.views <= 0) {
+        g_windowTrees.erase(it);
+    } else {
+        tree.device->Commit();
     }
 }
 
@@ -193,6 +324,7 @@ ComposeWebViewState *compose_webview_create(
 
     auto *s = new ComposeWebViewState();
     s->parent = parent;
+    const std::vector<HWND> before = threadWindows();
 
     std::wstring userDataFolder = opts.dataDirectory;
     if (userDataFolder.empty() && opts.incognito) {
@@ -212,16 +344,23 @@ ComposeWebViewState *compose_webview_create(
         Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
             [&](HRESULT result, ICoreWebView2Environment *env) -> HRESULT {
                 envResult = result;
-                if (SUCCEEDED(result) && env) s->env = env;
+                if (SUCCEEDED(result) && env) {
+                    s->env = env;
+                    /* A COM object starts with the address of its table of methods, which is in
+                     * the module that implements it. */
+                    g_engineModule = moduleAt(*reinterpret_cast<void **>(env));
+                }
                 envDone.store(true, std::memory_order_release);
                 return S_OK;
             }).Get());
     if (FAILED(hr)) {
+        logCreateFailure("starting the WebView2 environment", hr);
         delete s;
         return nullptr;
     }
-    compose_webview_pump_until_done(envDone);
+    compose_webview_pump_until_done(before, envDone);
     if (FAILED(envResult) || !s->env) {
+        logCreateFailure("creating the WebView2 environment", envResult);
         delete s;
         return nullptr;
     }
@@ -230,6 +369,7 @@ ComposeWebViewState *compose_webview_create(
     HRESULT ccResult = E_FAIL;
     ComPtr<ICoreWebView2Environment3> env3;
     if (FAILED(s->env.As(&env3)) || !env3) {
+        logCreateFailure("getting ICoreWebView2Environment3", E_NOINTERFACE);
         delete s;
         return nullptr;
     }
@@ -243,20 +383,24 @@ ComposeWebViewState *compose_webview_create(
                 return S_OK;
             }).Get());
     if (FAILED(hr)) {
+        logCreateFailure("starting the composition controller", hr);
         delete s;
         return nullptr;
     }
-    compose_webview_pump_until_done(ccDone);
+    compose_webview_pump_until_done(before, ccDone);
     if (FAILED(ccResult) || !s->compController) {
+        logCreateFailure("creating the composition controller", ccResult);
         delete s;
         return nullptr;
     }
 
     if (FAILED(s->compController.As(&s->controller)) || !s->controller) {
+        logCreateFailure("getting the controller", E_NOINTERFACE);
         delete s;
         return nullptr;
     }
     if (FAILED(s->controller->get_CoreWebView2(&s->webview)) || !s->webview) {
+        logCreateFailure("getting the web view", E_FAIL);
         delete s;
         return nullptr;
     }
@@ -305,14 +449,16 @@ ComposeWebViewState *compose_webview_create(
         s->controller->put_ZoomFactor(opts.zoomLevel);
     }
 
-    if (FAILED(DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&s->dcompDevice))) ||
-        FAILED(s->dcompDevice->CreateTargetForHwnd(parent, TRUE, &s->dcompTarget)) ||
-        FAILED(s->dcompDevice->CreateVisual(&s->rootVisual))) {
+    hr = joinWindowTree(s);
+    if (FAILED(hr)) {
+        logCreateFailure("joining the window's composition tree", hr);
         delete s;
         return nullptr;
     }
-    s->dcompTarget->SetRoot(s->rootVisual.Get());
-    if (FAILED(s->compController->put_RootVisualTarget(s->rootVisual.Get()))) {
+    hr = s->compController->put_RootVisualTarget(s->rootVisual.Get());
+    if (FAILED(hr)) {
+        logCreateFailure("setting the view's root visual", hr);
+        leaveWindowTree(s);
         delete s;
         return nullptr;
     }
@@ -371,6 +517,7 @@ void compose_webview_release(ComposeWebViewState *s) {
     compose_webview_uninstall_parent_subclass(s);
     compose_webview_unhook_events(s);
     if (s->controller) s->controller->Close();
+    leaveWindowTree(s);
     delete s;
 }
 
